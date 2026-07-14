@@ -49,6 +49,14 @@ button {
     font-weight:bold;
 }
 
+buttonx {
+    background:#c00000;
+    color:white;
+    padding:10px;
+    font-size:10px;
+    font-weight:bold;
+}
+
 button:disabled {
     background:#999;
 }
@@ -513,7 +521,7 @@ function renderTable(){
         <td>${item.harga}</td>
         <td>${item.qty}</td>
         <td>${item.total}</td>
-        <td><button onclick="deleteItem(${i})">Hapus❌</button></td>
+        <td><buttonx onclick="deleteItem(${i})">Hapus❌</button></td>
         </tr>`;
     });
 
