@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Sell Out SPG Fiesta</title>
+
+<style>
+
+body {
+    font-family: Segoe UI;
+    background:#f0f2f5;
+    margin:0;
+}
+
+.container {
+    max-width:500px;
+    margin:auto;
+    background:white;
+    padding:16px;
+    border-radius:12px;
+    box-shadow:0 5px 20px rgba(0,0,0,0.1);
+}
+
+h2 {
+    text-align:center;
+    color:#c00000;
+}
+
+label {
+    font-size:13px;
+    font-weight:bold;
+}
+
+input, select, button {
+    width:100%;
+    padding:12px;
+    margin:6px 0 14px;
+    border-radius:10px;
+    border:1px solid #ddd;
+    font-size:16px;
+}
+
+button {
+    background:#c00000;
+    color:white;
+    font-weight:bold;
+}
+
+button:disabled {
+    background:#999;
+}
+
+.hidden { display:none; }
+
+.badge {
+    background:#c00000;
+    color:white;
+    padding:6px;
+    border-radius:8px;
+    font-size:13px;
+    text-align:center;
+}
+
+.summary {
+    display:flex;
+    gap:10px;
+    margin-top:10px;
+}
+
+.summary .badge {
+    flex:1;
+}
+
+.table-wrapper {
+    overflow-x:auto;
+}
+
+table {
+    width:100%;
+    border-collapse:collapse;
+    min-width:400px;
+}
+
+th {
+    background:#c00000;
+    color:white;
+    padding:10px;
+}
+
+td {
+    border:1px solid #ddd;
+    padding:8px;
+    text-align:center;
+}
+
+/* DROPDOWN SEARCH */
+.dropdown {
+    border:1px solid #ddd;
+    border-radius:8px;
+    max-height:150px;
+    overflow-y:auto;
+    display:none;
+    background:white;
+}
+
+.dropdown div {
+    padding:10px;
+}
+
+.dropdown div:hover {
+    background:#f0f0f0;
+    cursor:pointer;
+}
+
+/* MODAL */
+.modal {
+    position:fixed;
+    top:0; left:0;
+    width:100%; height:100%;
+    background:rgba(0,0,0,0.5);
+    display:none;
+    align-items:center;
+    justify-content:center;
+}
+
+.modal-box {
+    background:white;
+    padding:20px;
+    border-radius:12px;
+    width:90%;
+    text-align:center;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>Sell Out SPG Fiesta</h2>
+
+<!-- STEP 1 -->
+<div id="step1">
+
+<label>Tanggal</label>
+<input type="date" id="tanggal">
+
+<label>Nama SPG</label>
+<select id="nama">
+<option value="">Pilih</option>
+<option>ASRI PRATIWI</option>
+<option>DELA AYUNI ASRIANTI</option>
+<option>DIYAH</option>
+<option>ERNI A</option>
+<option>GITA LM</option>
+<option>HANUM</option>
+<option>ILMA NAPILLAH</option>
+<option>INA MARLINA</option>
+<option>INDRI</option>
+<option>KEYA</option>
+<option>MARYATI</option>
+<option>NOPIYANTI</option>
+<option>NURTRIANTI</option>
+<option>RINI</option>
+<option>RISKA SILVIA</option>
+<option>RISMA JATNIKA PUTRI</option>
+<option>RISMA R</option>
+<option>SENITSA</option>
+<option>SHERINE A</option>
+<option>SILVI</option>
+<option>SITI MAEMUNAH</option>
+<option>SITI SA'ADAH</option>
+<option>SRI MEIDINA</option>
+<option>WINA</option>
+</select>
+
+<label>Outlet</label>
+<input type="text" id="outlet" placeholder="Masukkan Outlet"
+oninput="this.value = this.value.toUpperCase().replace(/\s+/g,' ')">
+
+<button onclick="lanjut()">Lanjut</button>
+
+</div>
+
+<!-- STEP 2 -->
+<div id="step2" class="hidden">
+
+<div class="badge" id="tanggalView"></div>
+
+<input id="namaFix" disabled>
+<input id="outletFix" disabled>
+
+<label>Cari SKU</label>
+<input type="text" id="searchSku" oninput="filterSKU()" placeholder="Ketik SKU...">
+<div id="dropdownSku" class="dropdown"></div>
+
+<label>Harga</label>
+<input type="number" id="harga" oninput="hitungTotal()">
+
+<label>Qty</label>
+<input type="number" id="qty" oninput="hitungTotal()">
+
+<label>Total</label>
+<input type="number" id="total" readonly>
+
+<button onclick="inputData()">+ Tambah Item</button>
+
+<!-- SUMMARY -->
+<div class="summary">
+<div class="badge">Qty: <span id="totalQty">0</span></div>
+<div class="badge">Rp: <span id="totalValue">0</span></div>
+</div>
+
+<!-- TABLE -->
+<div class="table-wrapper">
+<table>
+<thead>
+<tr>
+<th>SKU</th>
+<th>Harga</th>
+<th>Qty</th>
+<th>Total</th>
+<th></th>
+</tr>
+</thead>
+<tbody id="queue"></tbody>
+</table>
+</div>
+
+<button onclick="openModal()">SUBMIT</button>
+
+</div>
+
+</div>
+
+<!-- MODAL -->
+<div id="modal" class="modal">
+<div class="modal-box">
+<h3>Konfirmasi</h3>
+<p>Simpan data ini?</p>
+
+<button id="btnSimpan" onclick="submitData()">SIMPAN</button>
+<button onclick="closeModal()" style="background:#999;">BATAL</button>
+</div>
+</div>
+
+<script>
+
+const URL_SCRIPT = "https://script.google.com/macros/s/AKfycbyFZUArXR5JiLp37AtAJXEDsXwFc6aSdqZ878cp80stnMH6p0khhIqTYb1S0C23x8vnxw/exec";
+
+/* DATA SKU */
+const skuList = [
+{nama:"AKUMO NUGGET 1 KG",harga:0},
+{nama:"AKUMO NUGGET 250GR",harga:0},
+{nama:"AKUMO NUGGET 500GR",harga:0},
+{nama:"AKUMO NUGGET COIN 200GR",harga:0},
+{nama:"AMOGI 225GR",harga:0},
+{nama:"AMOGI 250GR",harga:0},
+{nama:"AMOGI NUGGET 1KG",harga:0},
+{nama:"AMOGI NUGGET 250GR",harga:0},
+{nama:"AMOGI NUGGET 450GR",harga:0},
+{nama:"AMOGI NUGGET 500 GRAM",harga:0},
+{nama:"ASIMO CHICKEN NUGGET 250GR",harga:0},
+{nama:"ASIMO NAGET AYAM KOMBINASI 250GR",harga:0},
+{nama:"ASIMO NAGET AYAM KOMBINASI 500GR",harga:0},
+{nama:"ASIMO NAGET AYAM KOMBINASI 1KG",harga:0},
+{nama:"ASIMO SOSIS 375 GR",harga:0},
+{nama:"ASIMO SOSIS 500 GR",harga:0},
+{nama:"ASIMO SOSIS AYAM KOMBINASI 750GR",harga:0},
+{nama:"ASIMO SOSIS MERAH 1KG",harga:0},
+{nama:"ASIMO SOSIS MERAH 500GR",harga:0},
+{nama:"AYAM GEPREK",harga:0},
+{nama:"AYAM RUJAK",harga:0},
+{nama:"B. BLACKPAPER",harga:0},
+{nama:"B. BULGOGI",harga:0},
+{nama:"B. RENDANG",harga:0},
+{nama:"B. YAKINIKU",harga:0},
+{nama:"C. CHEESE BULDAK",harga:0},
+{nama:"C. CURRY NOODLE",harga:0},
+{nama:"C. CURRY RICE",harga:0},
+{nama:"C. KARAGE",harga:0},
+{nama:"C. KATSU DONBURI",harga:0},
+{nama:"C. MUSHROOM NOODLE",harga:0},
+{nama:"C. RENDANG",harga:0},
+{nama:"C. SATAY",harga:0},
+{nama:"C. TANDORI",harga:0},
+{nama:"C. TERIYAKI",harga:0},
+{nama:"CHAMP SIOMAY 180 GR",harga:0},
+{nama:"CHAMP SOSIS AYAM 150",harga:0},
+{nama:"CHAMP BURGER",harga:0},
+{nama:"CHAMP CHICKEN NUGGET 225GR",harga:0},
+{nama:"CHAMP CHICKEN NUGGET 450GR",harga:0},
+{nama:"CHAMP CHICKEN NUGGET 900GR",harga:0},
+{nama:"CHAMP CHICKEN NUGGET ABC 225GR",harga:0},
+{nama:"CHAMP CHICKEN NUGGET ABC 450GR",harga:0},
+{nama:"CHAMP CHICKEN NUGGET COIN 200GR",harga:0},
+{nama:"CHAMP CHICKEN NUGGET CRUNCHY 225GR",harga:0},
+{nama:"CHAMP CHICKEN NUGGET CRUNCHY 450GR",harga:0},
+{nama:"CHAMP CHICKEN NUGGET STICK 225GR",harga:0},
+{nama:"CHAMP CRISPY BURGER 315GR",harga:0},
+{nama:"CHAMP CRUNCHY 225 GR",harga:0},
+{nama:"CHAMP CRUNCHY 450 GR",harga:0},
+{nama:"CHAMP NUGGET 225 GR",harga:0},
+{nama:"CHAMP NUGGET 450 GR",harga:0},
+{nama:"CHAMP NUGGET 900 GR",harga:0},
+{nama:"CHAMP NUGGET COIN 200 GR",harga:0},
+{nama:"CHAMP NUGGET COIN 200GR",harga:0},
+{nama:"CHAMP SOSIS AYAM 375",harga:0},
+{nama:"CHAMP SOSIS AYAM 1 KG",harga:0},
+{nama:"CHAMP SOSIS AYAM 40 1KG",harga:0},
+{nama:"CHAMP SOSIS AYAM ISI 15",harga:0},
+{nama:"CHAMP SOSIS AYAM ISI 3",harga:0},
+{nama:"CHAMP SOSIS AYAM ISI 6",harga:0},
+{nama:"CHAMP SOSIS BAKAR JUMBO",harga:0},
+{nama:"CHAMP SOSIS BAKAR MINI",harga:0},
+{nama:"CHAMP SOSIS MADU 300GR",harga:0},
+{nama:"CHAMP SOSIS SAPI ISI 15",harga:0},
+{nama:"CHAMP SOSIS SAPI ISI 6",harga:0},
+{nama:"CHAMP CHICKEN NUGGET STICK 400GR",harga:0},
+{nama:"FIESTA BRATIUWRST",harga:0},
+{nama:"FIESTA BROCOLI 400GR",harga:0},
+{nama:"FIESTA BUBLE KATSU",harga:0},
+{nama:"FIESTA BURGER AYAM 360 GR",harga:0},
+{nama:"FIESTA CHEESE 123 400 GR",harga:0},
+{nama:"FIESTA CHEESY BOMBS 400 GR",harga:0},
+{nama:"FIESTA CHEESY LOVER 400GR",harga:0},
+{nama:"FIESTA CHICKEN KARAGE 200GR",harga:0},
+{nama:"FIESTA CHICKEN KARAGE 400GR",harga:0},
+{nama:"FIESTA CHICKEN NUGGET 200GR",harga:0},
+{nama:"FIESTA CHICKEN NUGGET 400GR",harga:0},
+{nama:"FIESTA CHICKEN POK POK 400GR",harga:0},
+{nama:"FIESTA CHICKEN SPICY KARAGE 400GR",harga:0},
+{nama:"FIESTA CHICKEN STIKIE 200GR",harga:0},
+{nama:"FIESTA CHICKEN STIKIE 400GR",harga:0},
+{nama:"FIESTA CHICKEN TOFU",harga:0},
+{nama:"FIESTA CORDON BLUE 500 GR",harga:0},
+{nama:"FIESTA CRISPY BUBBLE 400 GR",harga:0},
+{nama:"FIESTA CRISPY BURGER 365 GR",harga:0},
+{nama:"FIESTA CRISPY CRUNCH 300GR",harga:0},
+{nama:"FIESTA CRISPY CRUNCHY 300 GR",harga:0},
+{nama:"FIESTA CRISPY NUGGET BUBBLE 400GR",harga:0},
+{nama:"FIESTA CRISPY NUGGET BUBBLE KATSU",harga:0},
+{nama:"FIESTA DELISTRIPE",harga:0},
+{nama:"FIESTA FRIED CHIKEN",harga:0},
+{nama:"FIESTA GOLDEN POP BITE 500 GR",harga:0},
+{nama:"FIESTA GYOZA 180GR",harga:0},
+{nama:"FIESTA HAPPY STAR",harga:0},
+{nama:"FIESTA KEECHO",harga:0},
+{nama:"FIESTA KENTANG 1 KG",harga:0},
+{nama:"FIESTA KENTANG 500 GR",harga:0},
+{nama:"FIESTA NUGGET DINO 400GR",harga:0},
+{nama:"FIESTA PIZZA ABC 400 GR",harga:0},
+{nama:"FIESTA POKPOK 400 GR",harga:0},
+{nama:"FIESTA RTG ALLVAR",harga:0},
+{nama:"FIESTA RTG CHESE LAVA",harga:0},
+{nama:"FIESTA RTG KOREAN",harga:0},
+{nama:"FIESTA RTG ORI",harga:0},
+{nama:"FIESTA RTG PAKET (MENTAI, CHESY MELT, BASO BBQ)",harga:0},
+{nama:"FIESTA RTM BOLOGNAISE",harga:0},
+{nama:"FIESTA RTM RENDANG",harga:0},
+{nama:"FIESTA RTM TERIYAKI",harga:0},
+{nama:"FIESTA RTM YAKINIKU",harga:0},
+{nama:"FIESTA SCBC",harga:0},
+{nama:"FIESTA SCHNITZEL 400GR",harga:0},
+{nama:"FIESTA SHOESTRING 1KG",harga:0},
+{nama:"FIESTA SHOESTRING 500 GR",harga:0},
+{nama:"FIESTA SIOMAY 180 GR",harga:0},
+{nama:"FIESTA SIOMAY 900 GR",harga:0},
+{nama:"FIESTA SMOKED CHICKEN BREAST",harga:0},
+{nama:"FIESTA SOSIS BRATWURST ORI 300GR",harga:0},
+{nama:"FIESTA SOSIS ORIGINAL / FRANKFUTER",harga:0},
+{nama:"FIESTA SPICY CHICK 400GR",harga:0},
+{nama:"FIESTA SPICY WINGS 400GR",harga:0},
+{nama:"I MEATBALL",harga:0},
+{nama:"K. BBQ CHICKEN",harga:0},
+{nama:"NASI KUNING",harga:0},
+{nama:"NASI UDUK",harga:0},
+{nama:"POPBITES SAMBEL MATAH",harga:0},
+{nama:"SCB FRIED RICE",harga:0},
+{nama:"SPG BOLOGNESE",harga:0},
+{nama:"SPG CARBONARA",harga:0},
+{nama:"TRUFFLE GYUDON",harga:0}
+];
+
+let items = [];
+let selectedSKU = null;
+
+function el(id){ return document.getElementById(id); }
+
+/* STEP */
+function lanjut(){
+
+    const tgl = el("tanggal").value;
+    const namaVal = el("nama").value;
+    const outletVal = el("outlet").value;
+
+    if(!tgl || !namaVal || !outletVal){
+        alert("Lengkapi data");
+        return;
+    }
+
+    el("step1").classList.add("hidden");
+    el("step2").classList.remove("hidden");
+
+    el("namaFix").value = namaVal;
+    el("outletFix").value = outletVal;
+    el("tanggalView").innerHTML = "Tanggal: " + tgl;
+}
+
+/* SEARCH SKU */
+function filterSKU(){
+
+    const keyword = el("searchSku").value.toLowerCase();
+    const dropdown = el("dropdownSku");
+
+    dropdown.innerHTML = "";
+    selectedSKU = null;
+
+    if(!keyword){
+        dropdown.style.display = "none";
+        return;
+    }
+
+    const results = skuList.filter(item =>
+        item.nama.toLowerCase().includes(keyword)
+    );
+
+    results.forEach(item=>{
+        const div = document.createElement("div");
+        div.innerHTML = item.nama;
+
+        div.onclick = function(){
+            el("searchSku").value = item.nama;
+            el("harga").value = item.harga;
+
+            selectedSKU = item.nama;
+
+            dropdown.style.display = "none";
+            hitungTotal();
+        };
+
+        dropdown.appendChild(div);
+    });
+
+    dropdown.style.display = "block";
+}
+
+/* HITUNG */
+function hitungTotal(){
+    const harga = Number(el("harga").value) || 0;
+    const qty = Number(el("qty").value) || 0;
+    el("total").value = harga * qty;
+}
+
+/* TAMBAH */
+function inputData(){
+
+    if(!selectedSKU){
+        alert("Pilih SKU dari list");
+        return;
+    }
+
+    const harga = el("harga").value;
+    const qty = el("qty").value;
+    const total = el("total").value;
+
+    if(!harga || !qty){
+        alert("Lengkapi data");
+        return;
+    }
+
+    items.push({
+        sku: selectedSKU,
+        harga: Number(harga),
+        qty: Number(qty),
+        total: Number(total)
+    });
+
+    renderTable();
+    resetInput();
+}
+
+/* RESET */
+function resetInput(){
+    el("searchSku").value = "";
+    el("harga").value = "";
+    el("qty").value = "";
+    el("total").value = "";
+    selectedSKU = null;
+}
+
+/* RENDER */
+function renderTable(){
+
+    let html = "";
+    let tq = 0;
+    let tv = 0;
+
+    items.forEach((item,i)=>{
+
+        tq += item.qty;
+        tv += item.total;
+
+        html += `
+        <tr>
+        <td>${item.sku}</td>
+        <td>${item.harga}</td>
+        <td>${item.qty}</td>
+        <td>${item.total}</td>
+        <td><button onclick="deleteItem(${i})">🗑</button></td>
+        </tr>`;
+    });
+
+    el("queue").innerHTML = html;
+    el("totalQty").innerHTML = tq;
+    el("totalValue").innerHTML = tv.toLocaleString();
+}
+
+/* DELETE */
+function deleteItem(i){
+    if(!confirm("Hapus item?")) return;
+    items.splice(i,1);
+    renderTable();
+}
+
+/* MODAL */
+function openModal(){
+    if(items.length===0){
+        alert("Data kosong");
+        return;
+    }
+    el("modal").style.display="flex";
+}
+
+function closeModal(){
+    el("modal").style.display="none";
+}
+
+/* SUBMIT */
+function submitData(){
+
+    const btn = el("btnSimpan");
+
+    btn.disabled = true;
+    btn.innerHTML = "Menyimpan...";
+
+    fetch(URL_SCRIPT,{
+        method:"POST",
+        body: JSON.stringify({
+            tanggal: el("tanggal").value,
+            nama: el("namaFix").value,
+            outlet: el("outletFix").value,
+            items: items
+        })
+    })
+    .then(res=>res.json())
+    .then(()=>{
+        alert("Berhasil disimpan");
+        location.reload();
+    })
+    .catch(()=>{
+        alert("Gagal");
+        btn.disabled=false;
+        btn.innerHTML="SIMPAN";
+    });
+}
+
+</script>
+
+</body>
+</html>
