@@ -1,0 +1,369 @@
+/* ================= RESET ================= */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Inter', sans-serif;
+}
+
+/* ================= BODY ================= */
+body {
+  background: linear-gradient(135deg, #f4f6fb, #e9eef5);
+  color: #222;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ================= LAYOUT ================= */
+.page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 30px 15px;
+}
+
+/* ================= HEADER ================= */
+.app-header {
+  margin-bottom: 20px;
+}
+
+.app-title {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.app-subtitle {
+  font-size: 13px;
+  color: #777;
+}
+
+/* ================= STEP ================= */
+.stepper {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 15px;
+  font-size: 13px;
+}
+
+.step {
+  color: #aaa;
+  font-weight: 500;
+}
+
+.step.active {
+  color: #c00000;
+  font-weight: 700;
+}
+
+/* ================= CARD ================= */
+.card {
+  width: 100%;
+  max-width: 720px;
+  background: linear-gradient(145deg, #ffffff, #f8f9fa);
+  padding: 26px;
+  border-radius: 18px;
+  box-shadow: 0 12px 35px rgba(0,0,0,0.08);
+  animation: fadeIn 0.4s ease;
+  backdrop-filter: blur(8px);
+}
+
+/* ================= TEXT ================= */
+.title {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: #777;
+  margin-bottom: 20px;
+}
+
+/* ================= FORM ================= */
+.field {
+  margin-bottom: 16px;
+}
+
+.field label {
+  font-size: 12px;
+  color: #555;
+  font-weight: 600;
+}
+
+/* ================= INPUT ================= */
+input,
+select {
+  width: 100%;
+  padding: 12px 14px;
+  margin-top: 6px;
+  border-radius: 12px;
+  border: 1px solid #ddd;
+  font-size: 14px;
+  transition: 0.25s;
+  background: #fafafa;
+}
+
+input:focus,
+select:focus {
+  border-color: #c00000;
+  background: #fff;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(192, 0, 0, 0.08);
+}
+
+/* ================= BUTTON ================= */
+.btn-primary {
+  width: 100%;
+  padding: 13px;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg, #c00000, #e11d1d);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.25s;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 15px rgba(192,0,0,0.3);
+}
+
+.btn-secondary {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: none;
+  background: #6c757d;
+  color: white;
+  cursor: pointer;
+}
+
+.btn-danger {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: none;
+  background: #dc3545;
+  color: white;
+  cursor: pointer;
+}
+
+/* ================= TABLE ================= */
+.table-modern {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.table-modern thead {
+  background: #f1f3f5;
+}
+
+.table-modern th {
+  padding: 12px;
+  font-size: 12px;
+  text-align: left;
+  color: #555;
+}
+
+.table-modern td {
+  padding: 12px;
+  font-size: 14px;
+}
+
+.table-modern tr {
+  border-bottom: 1px solid #eee;
+  transition: 0.2s;
+}
+
+.table-modern tr:hover {
+  background: #fafafa;
+}
+
+/* ================= BADGE ================= */
+.badge {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  background: #c00000;
+  color: white;
+  font-weight: 600;
+}
+
+/* ================= TOTAL BOX ================= */
+.total-box {
+  margin-top: 15px;
+  padding: 14px;
+  border-radius: 12px;
+  background: #f8f9fa;
+  border: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+}
+
+.total-box span {
+  font-weight: 600;
+}
+
+.total-box strong {
+  color: #28a745;
+  font-size: 18px;
+}
+
+/* ================= OVERLAY ================= */
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(5px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* ================= MODAL ================= */
+.modal {
+  width: 260px;
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+}
+
+/* ================= SPINNER ================= */
+.spinner {
+  width: 42px;
+  height: 42px;
+  border: 4px solid #eee;
+  border-top: 4px solid #c00000;
+  border-radius: 50%;
+  margin: auto;
+  animation: spin 0.8s linear infinite;
+}
+
+/* ================= ANIMATION ================= */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ================= RESPONSIVE ================= */
+@media (max-width: 600px) {
+  .card {
+    padding: 20px;
+  }
+
+  .app-title {
+    font-size: 18px;
+  }
+}
+
+.react-calendar {
+  border: none;
+  border-radius: 16px;
+  padding: 10px;
+  width: 100%;
+  background: #fff;
+}
+
+.react-calendar__tile {
+  border-radius: 10px;
+  padding: 10px 6px;
+  transition: 0.2s;
+}
+
+.react-calendar__tile:hover {
+  background: #f1f3f5;
+}
+
+.react-calendar__tile--active {
+  background: #c00000 !important;
+  color: white;
+}
+
+.react-calendar__month-view__days__day--weekend {
+  color: #dc3545;
+}
+
+.modern-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+/* HEADER */
+.modern-table thead th {
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  text-align: left;
+  padding: 10px;
+  font-weight: 600;
+  color: #495057;
+  border-bottom: 1px solid #f1f3f5;
+  z-index: 1;
+}
+
+/* ROW */
+.modern-table tbody tr {
+  transition: all 0.2s ease;
+}
+
+/* ZEBRA SOFT */
+.modern-table tbody tr:nth-child(even) {
+  background-color: #f8f9fa;
+}
+
+.modern-table tbody tr:nth-child(odd) {
+  background-color: #ffffff;
+}
+
+/* HOVER */
+.modern-table tbody tr:hover {
+  background-color: #edf2ff;
+}
+
+/* CELL */
+.modern-table td {
+  padding: 10px;
+  border: none;
+  color: #343a40;
+}
+
+/* STATUS */
+.status {
+  font-weight: 500;
+}
+
+/* WARNA STATUS */
+.status[data-status="SAKIT"] {
+  color: #e03131;
+}
+
+.status[data-status="IZIN"] {
+  color: #f08c00;
+}
+
+.status[data-status="CUTI"] {
+  color: #1c7ed6;
+}
+
+.status[data-status="OFF"] {
+  color: #2f9e44;
+}
