@@ -199,7 +199,7 @@ export default function InputSPG() {
           {step === 1 && (
             <>
               <h5 className="fw-bold text-primary text-center mb-4">
-                Isi Tanggal, Nama SPG, Nama Toko/Pasar
+                Perhatikan Tanggal 
               </h5>
 
               <Form>
