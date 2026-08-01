@@ -13,14 +13,14 @@ export default function Home() {
     },
     {
       title: "Permit",
-      desc: "Konfirmasi aktivitas SPG",
+      desc: "Konfirmasi Tidak Ada Sell Out",
       icon: "✅",
       path: "/permit",
       color: "#16a34a"
     },
     {
-      title: "Summary",
-      desc: "Monitoring laporan & performa",
+      title: "Summary 1 Bulan",
+      desc: "Cek Isi Sell Out SPG",
       icon: "📊",
       path: "/summary",
       color: "#2563eb"
@@ -28,7 +28,7 @@ export default function Home() {
 
     {
     title: "Summary All SPG",
-    desc: "Rekap seluruh performa SPG",
+    desc: "View All SPG",
     icon: "📈",
     path: "/summary-all",
     color: "#7c3aed"
