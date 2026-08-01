@@ -199,7 +199,7 @@ export default function InputSPG() {
           {step === 1 && (
             <>
               <h5 className="fw-bold text-primary text-center mb-4">
-                Informasi SPG
+                Isi Tanggal, Nama SPG, Nama Toko/Pasar
               </h5>
 
               <Form>
@@ -258,12 +258,12 @@ export default function InputSPG() {
           {step === 2 && (
             <>
               <h5 className="fw-bold text-success text-center mb-3">
-                Input Produk + Foto
+                Input Transaksi + Foto Aktivitas Grid
               </h5>
 
               {/* FOTO */}
               <Form.Group className="mb-3">
-                <Form.Label>Foto Activity (WAJIB)</Form.Label>
+                <Form.Label>Foto Activity Grid (WAJIB)</Form.Label>
                 <Form.Control type="file" onChange={handleImage} />
               </Form.Group>
 
