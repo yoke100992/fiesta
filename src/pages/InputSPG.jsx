@@ -66,7 +66,7 @@ export default function InputSPG() {
       setProductList(
         (product || []).map((p) => ({
           value: p.sku,
-          label: `${p.sku} (Rp ${formatNumber(p.hargaDefault || p.harga)})`,
+          label: `${p.sku}`,
           harga: p.hargaDefault || p.harga || 0
         }))
       );
@@ -106,8 +106,8 @@ export default function InputSPG() {
 
     setItem({
       sku: null,
-      harga: 0,
-      qty: 0
+      harga: null,
+      qty: null
     });
   };
 
