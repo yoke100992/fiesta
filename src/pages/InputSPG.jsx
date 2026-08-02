@@ -34,8 +34,8 @@ export default function InputSPG() {
 
   const [item, setItem] = useState({
     sku: null,
-    harga: 0,
-    qty: 0
+    harga: "",
+    qty: ""
   });
 
   const [photo, setPhoto] = useState(null);
@@ -106,8 +106,8 @@ export default function InputSPG() {
 
     setItem({
       sku: null,
-      harga: null,
-      qty: null
+      harga: "",
+      qty: ""
     });
   };
 
