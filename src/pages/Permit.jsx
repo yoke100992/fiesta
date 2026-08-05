@@ -17,7 +17,7 @@ export default function Permit() {
   const [permitData, setPermitData] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const statusOptions = ["SAKIT", "IZIN", "CUTI", "OFF", "MEETING", " TIDAK ADA PENJUALAN"];
+  const statusOptions = ["SAKIT", "IZIN", "CUTI", "OFF", "MEETING"];
 
   // 🔥 LOAD AWAL
   useEffect(() => {
