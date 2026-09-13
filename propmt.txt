@@ -1,3 +1,18 @@
+NEW OR REPLACE
+git init
+git add .
+git commit -m "Initial commit - fiesta sellout app"
+git branch -M main
+git remote add origin https://github.com/yoke100992/fiesta.git
+git push -u origin main --force
+
+UPDATE
+git add .
+git commit -m "Fix InputView.jsx encoding issue"
+git push origin main
+
+
+
 Halo 
 saya Yoke
 

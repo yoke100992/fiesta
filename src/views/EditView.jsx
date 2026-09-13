@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import {
     Box, Paper, Select, MenuItem, Button, TextField,
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
     IconButton, Snackbar, Alert, CircularProgress, Typography,
-    Chip, Stack, Divider, Avatar, Tooltip
+    Chip, Stack, Divider, Avatar, Tooltip, Fade
 } from '@mui/material';
 import {
     Delete as DeleteIcon, Edit as EditIcon, Save as SaveIcon,
@@ -14,15 +14,16 @@ import {
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { getSelloutData, getNamaList, getSkuList, updateSellout, deleteSellout } from '../utils/storage';
 
-// ? FUNGSI BANTU: Format tanggal ke YYYY-MM-DD sesuai waktu LOKAL
+// ✅ FUNGSI BANTU: Format tanggal ke YYYY-MM-DD sesuai waktu LOKAL
 const formatDateLocal = (date) => {
+    if (!date) return '';
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
 };
 
-// ? FUNGSI BANTU: Format Rupiah
+// ✅ FUNGSI BANTU: Format Rupiah
 const formatRupiah = (number) => {
     return new Intl.NumberFormat('id-ID').format(number);
 };
@@ -117,7 +118,7 @@ export default function EditView() {
 
         try {
             await updateSellout(recordId, { items: updatedItems });
-            setSnackbar({ open: true, message: editingItem.itemId === 'new' ? 'Item baru ditambahkan!' : 'Data diupdate!', severity: 'success' });
+            setSnackbar({ open: true, message: editingItem.itemId === 'new' ? 'Item baru ditambahkan!' : 'Data berhasil diupdate!', severity: 'success' });
             cancelEdit();
             handleSearch();
         } catch (error) {
@@ -133,76 +134,113 @@ export default function EditView() {
 
         if (updatedItems.length === 0) {
             await deleteSellout(recordId);
-            setSnackbar({ open: true, message: 'Record dihapus', severity: 'success' });
+            setSnackbar({ open: true, message: 'Record dihapus karena tidak ada item', severity: 'success' });
         } else {
             await updateSellout(recordId, { items: updatedItems });
-            setSnackbar({ open: true, message: 'Item dihapus', severity: 'success' });
+            setSnackbar({ open: true, message: 'Item berhasil dihapus', severity: 'success' });
         }
         handleSearch();
     };
 
     return (
-        <Box sx={{ pb: 4 }}>
+        <Box sx={{ pb: 8 }}> {/* pb: 8 agar tidak tertutup bottom nav */}
+
             {/* ========== FILTER CARD ========== */}
-            <Paper
-                elevation={0}
-                sx={{
-                    p: 2.5, mb: 2, borderRadius: 3,
-                    border: '1px solid rgba(227, 30, 36, 0.1)',
-                    background: 'linear-gradient(135deg, #ffffff 0%, #fff8f8 100%)'
-                }}
-            >
-                <Typography variant="body1" fontWeight="bold" color="primary" sx={{ mb: 1.5, display: 'flex', alignItems: 'center', gap: 1, fontSize: '0.95rem' }}>
-                    <SearchIcon sx={{ fontSize: 20 }} /> Cari Data Sell Out
-                </Typography>
+            <Paper elevation={0} sx={{
+                p: { xs: 2, md: 3 }, mb: 3, borderRadius: 4,
+                border: '1px solid rgba(30, 64, 175, 0.08)',
+                background: 'white',
+                boxShadow: '0 2px 12px rgba(30, 64, 175, 0.04)'
+            }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
+                    <Avatar sx={{ bgcolor: '#1e40af', width: 40, height: 40, boxShadow: '0 4px 12px rgba(30, 64, 175, 0.3)' }}>
+                        <SearchIcon sx={{ fontSize: 20 }} />
+                    </Avatar>
+                    <Box>
+                        <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1.05rem', color: '#1e40af', lineHeight: 1.2 }}>
+                            Cari Data Sell Out
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            Filter berdasarkan Nama SPG dan Tanggal
+                        </Typography>
+                    </Box>
+                </Box>
+                <Divider sx={{ mb: 2.5 }} />
 
-                <Stack spacing={1.5}>
-                    <Select
-                        fullWidth
-                        displayEmpty
-                        value={filterNama}
-                        onChange={(e) => setFilterNama(e.target.value)}
-                        startAdornment={<PersonIcon sx={{ color: 'text.secondary', mr: 1, fontSize: 20 }} />}
-                        sx={{ borderRadius: 2, backgroundColor: 'white', fontSize: '0.85rem' }}
-                    >
-                        <MenuItem value="" disabled>Pilih Nama SPG</MenuItem>
-                        <MenuItem value="">Semua Nama</MenuItem>
-                        {namaList.map(n => <MenuItem key={n} value={n} sx={{ fontSize: '0.85rem' }}>{n}</MenuItem>)}
-                    </Select>
+                <Stack spacing={2.5}>
+                    <Box>
+                        <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>Nama SPG</Typography>
+                        <Select
+                            fullWidth displayEmpty
+                            value={filterNama}
+                            onChange={(e) => setFilterNama(e.target.value)}
+                            startAdornment={<PersonIcon sx={{ color: 'text.secondary', mr: 1, fontSize: 20 }} />}
+                            sx={{
+                                borderRadius: 3, backgroundColor: '#f8fafc', fontSize: '0.95rem',
+                                '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
+                                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#3b82f6' },
+                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1e40af', borderWidth: 2 }
+                            }}
+                        >
+                            <MenuItem value="" disabled>Pilih Nama SPG</MenuItem>
+                            <MenuItem value="">Semua Nama</MenuItem>
+                            {namaList.map(n => <MenuItem key={n} value={n} sx={{ fontSize: '0.95rem' }}>{n}</MenuItem>)}
+                        </Select>
+                    </Box>
 
-                    <DatePicker
-                        label="Filter Tanggal"
-                        value={filterDate}
-                        onChange={setFilterDate}
-                        sx={{
-                            width: '100%',
-                            '& .MuiOutlinedInput-root': { borderRadius: 2, backgroundColor: 'white', fontSize: '0.85rem' }
-                        }}
-                    />
+                    <Box>
+                        <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>Tanggal</Typography>
+                        <DatePicker
+                            label="Pilih Tanggal"
+                            value={filterDate}
+                            onChange={setFilterDate}
+                            slotProps={{
+                                textField: {
+                                    fullWidth: true,
+                                    sx: {
+                                        '& .MuiOutlinedInput-root': {
+                                            borderRadius: 3, backgroundColor: '#f8fafc', fontSize: '0.95rem',
+                                            '& fieldset': { borderColor: '#e2e8f0' },
+                                            '&:hover fieldset': { borderColor: '#3b82f6' },
+                                            '&.Mui-focused fieldset': { borderColor: '#1e40af', borderWidth: 2 }
+                                        }
+                                    }
+                                }
+                            }}
+                        />
+                    </Box>
 
                     <Button
                         variant="contained"
                         fullWidth
                         onClick={handleSearch}
                         startIcon={<SearchIcon sx={{ fontSize: 18 }} />}
-                        sx={{ py: 1.2, borderRadius: 2, fontWeight: 'bold', textTransform: 'none', fontSize: '0.85rem' }}
+                        sx={{
+                            py: 1.5, borderRadius: 3, fontWeight: 'bold', textTransform: 'none', fontSize: '0.95rem',
+                            boxShadow: '0 4px 12px rgba(30, 64, 175, 0.2)',
+                            background: 'linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)',
+                            '&:hover': { background: 'linear-gradient(135deg, #1e3a8a 0%, #172554 100%)' }
+                        }}
                     >
                         Tampilkan Data
                     </Button>
                 </Stack>
             </Paper>
 
+            {/* ========== LOADING STATE ========== */}
             {loading && (
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 4 }}>
-                    <CircularProgress size={30} sx={{ color: 'primary.main' }} />
-                    <Typography sx={{ mt: 1.5, color: 'text.secondary', fontSize: '0.8rem' }}>Memuat data...</Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 6 }}>
+                    <CircularProgress size={40} sx={{ color: '#1e40af' }} />
+                    <Typography sx={{ mt: 2, color: 'text.secondary', fontSize: '0.9rem', fontWeight: 500 }}>Memuat data...</Typography>
                 </Box>
             )}
 
+            {/* ========== EMPTY STATE ========== */}
             {!loading && results.length === 0 && (
-                <Paper elevation={0} sx={{ p: 4, textAlign: 'center', borderRadius: 3, border: '1px dashed #e0e0e0' }}>
-                    <SearchIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>Tidak ada data ditemukan</Typography>
+                <Paper elevation={0} sx={{ p: 6, textAlign: 'center', borderRadius: 4, border: '2px dashed #e2e8f0', bgcolor: '#f8fafc' }}>
+                    <SearchIcon sx={{ fontSize: 56, color: '#cbd5e1', mb: 2 }} />
+                    <Typography variant="h6" color="#64748b" sx={{ mb: 1, fontWeight: 600 }}>Tidak ada data ditemukan</Typography>
+                    <Typography variant="body2" color="#94a3b8">Coba ubah filter nama atau tanggal di atas.</Typography>
                 </Paper>
             )}
 
@@ -216,41 +254,41 @@ export default function EditView() {
                         key={record.id}
                         elevation={0}
                         sx={{
-                            p: 2, mb: 2, borderRadius: 3,
-                            boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
-                            border: '1px solid #f0f0f0'
+                            p: { xs: 2, md: 3 }, mb: 3, borderRadius: 4,
+                            boxShadow: '0 2px 12px rgba(30, 64, 175, 0.04)',
+                            border: '1px solid rgba(30, 64, 175, 0.06)',
+                            transition: 'box-shadow 0.3s ease',
+                            '&:hover': { boxShadow: '0 8px 24px rgba(30, 64, 175, 0.08)' }
                         }}
                     >
                         {/* Card Header */}
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5, flexWrap: 'wrap' }}>
-                            <Avatar sx={{ bgcolor: 'primary.main', width: 38, height: 38, fontWeight: 'bold', fontSize: '1rem' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5, flexWrap: 'wrap' }}>
+                            <Avatar sx={{ bgcolor: '#1e40af', width: 44, height: 44, fontWeight: 'bold', fontSize: '1.1rem', boxShadow: '0 4px 12px rgba(30, 64, 175, 0.3)' }}>
                                 {record.nama.charAt(0).toUpperCase()}
                             </Avatar>
                             <Box sx={{ flexGrow: 1 }}>
-                                <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '0.9rem', lineHeight: 1.2 }}>{record.nama}</Typography>
-                                <Stack direction="row" spacing={0.5} sx={{ mt: 0.5, flexWrap: 'wrap' }}>
+                                <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1.05rem', color: '#1e293b', lineHeight: 1.2 }}>{record.nama}</Typography>
+                                <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap' }}>
                                     <Chip
-                                        icon={<StoreIcon sx={{ fontSize: '14px !important' }} />}
+                                        icon={<StoreIcon sx={{ fontSize: '16px !important' }} />}
                                         label={record.namaToko}
                                         size="small"
                                         variant="outlined"
-                                        sx={{ height: 22, fontSize: '0.7rem' }}
+                                        sx={{ height: 24, fontSize: '0.75rem', borderColor: '#cbd5e1', color: '#475569', bgcolor: '#f8fafc' }}
                                     />
                                     <Chip
-                                        icon={<CalendarIcon sx={{ fontSize: '14px !important' }} />}
+                                        icon={<CalendarIcon sx={{ fontSize: '16px !important' }} />}
                                         label={record.tanggal}
                                         size="small"
-                                        color="primary"
-                                        variant="tonal"
-                                        sx={{ height: 22, fontSize: '0.7rem' }}
+                                        sx={{ height: 24, fontSize: '0.75rem', bgcolor: '#eff6ff', color: '#1e40af', fontWeight: 600 }}
                                     />
                                 </Stack>
                             </Box>
                         </Box>
 
-                        <Divider sx={{ mb: 1.5 }} />
+                        <Divider sx={{ mb: 2.5 }} />
 
-                        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2 }}>
+                        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3 }}>
 
                             {/* Image Section */}
                             <Box sx={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -259,32 +297,34 @@ export default function EditView() {
                                     src={record.foto}
                                     alt="Foto Toko"
                                     sx={{
-                                        width: { xs: '100%', md: 110 },
-                                        height: { xs: 130, md: 110 },
+                                        width: { xs: '100%', md: 140 },
+                                        height: { xs: 160, md: 140 },
                                         objectFit: 'cover',
-                                        borderRadius: 2,
-                                        border: '1px solid #f5f5f5',
-                                        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-                                        cursor: 'pointer'
+                                        borderRadius: 3,
+                                        border: '2px solid #e2e8f0',
+                                        boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+                                        cursor: 'pointer',
+                                        transition: 'transform 0.3s ease, border-color 0.3s ease',
+                                        '&:hover': { transform: 'scale(1.02)', borderColor: '#1e40af' }
                                     }}
                                     onClick={() => window.open(record.foto, '_blank')}
                                 />
-                                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.65rem' }}>
-                                    <ImageIcon sx={{ fontSize: 12 }} /> Perbesar
+                                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', fontWeight: 500 }}>
+                                    <ImageIcon sx={{ fontSize: 14 }} /> Klik untuk perbesar
                                 </Typography>
                             </Box>
 
                             {/* Table Section */}
                             <Box sx={{ flexGrow: 1, overflowX: 'auto' }}>
-                                <TableContainer sx={{ borderRadius: 2, border: '1px solid #f0f0f0' }}>
+                                <TableContainer sx={{ borderRadius: 3, border: '1px solid #e2e8f0' }}>
                                     <Table size="small">
                                         <TableHead>
-                                            <TableRow sx={{ backgroundColor: '#fafafa' }}>
-                                                <TableCell sx={{ fontWeight: 'bold', color: 'text.secondary', fontSize: '0.7rem', py: 1, width: '30%' }}>SKU</TableCell>
-                                                <TableCell align="right" sx={{ fontWeight: 'bold', color: 'text.secondary', fontSize: '0.7rem', py: 1, width: '25%' }}>HARGA</TableCell>
-                                                <TableCell align="center" sx={{ fontWeight: 'bold', color: 'text.secondary', fontSize: '0.7rem', py: 1, width: '15%' }}>QTY</TableCell>
-                                                <TableCell align="right" sx={{ fontWeight: 'bold', color: 'text.secondary', fontSize: '0.7rem', py: 1, width: '20%' }}>TOTAL</TableCell>
-                                                <TableCell align="center" sx={{ fontWeight: 'bold', color: 'text.secondary', fontSize: '0.7rem', py: 1, width: '10%' }}>AKSI</TableCell>
+                                            <TableRow sx={{ backgroundColor: '#f8fafc' }}>
+                                                <TableCell sx={{ fontWeight: 'bold', color: '#475569', fontSize: '0.75rem', py: 1.5 }}>SKU</TableCell>
+                                                <TableCell align="right" sx={{ fontWeight: 'bold', color: '#475569', fontSize: '0.75rem', py: 1.5 }}>HARGA</TableCell>
+                                                <TableCell align="center" sx={{ fontWeight: 'bold', color: '#475569', fontSize: '0.75rem', py: 1.5 }}>QTY</TableCell>
+                                                <TableCell align="right" sx={{ fontWeight: 'bold', color: '#475569', fontSize: '0.75rem', py: 1.5 }}>TOTAL</TableCell>
+                                                <TableCell align="center" sx={{ fontWeight: 'bold', color: '#475569', fontSize: '0.75rem', py: 1.5 }}>AKSI</TableCell>
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
@@ -299,29 +339,26 @@ export default function EditView() {
                                                         key={item.id}
                                                         hover
                                                         sx={{
-                                                            backgroundColor: isEditing ? '#fff8f8' : 'transparent',
+                                                            backgroundColor: isEditing ? '#eff6ff' : 'transparent',
                                                             transition: 'background-color 0.2s'
                                                         }}
                                                     >
                                                         {isEditing ? (
                                                             <>
-                                                                {/* ? CELL SKU: Select diperbesar pad-nya */}
                                                                 <TableCell sx={{ py: 1.5, px: 1 }}>
                                                                     <Select
                                                                         fullWidth
                                                                         value={editForm.sku}
                                                                         onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })}
                                                                         sx={{
-                                                                            fontSize: '0.85rem',
-                                                                            '& .MuiSelect-select': { py: 1.2, px: 1.5 }, // Padding dalam diperbesar
-                                                                            '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e0e0e0' }
+                                                                            borderRadius: 2, backgroundColor: 'white', fontSize: '0.85rem',
+                                                                            '& .MuiSelect-select': { py: 1, px: 1.5 },
+                                                                            '& .MuiOutlinedInput-notchedOutline': { borderColor: '#1e40af', borderWidth: 2 }
                                                                         }}
                                                                     >
                                                                         {skuList.map(s => <MenuItem key={s} value={s} sx={{ fontSize: '0.85rem' }}>{s}</MenuItem>)}
                                                                     </Select>
                                                                 </TableCell>
-
-                                                                {/* ? CELL HARGA: TextField diperbesar pad-nya */}
                                                                 <TableCell align="right" sx={{ py: 1.5, px: 1 }}>
                                                                     <TextField
                                                                         fullWidth
@@ -329,15 +366,13 @@ export default function EditView() {
                                                                         onChange={handleEditHargaChange}
                                                                         sx={{
                                                                             '& .MuiOutlinedInput-root': {
-                                                                                fontSize: '0.85rem',
-                                                                                '& input': { padding: '10px 14px' }, // Padding dalam diperbesar
-                                                                                '& fieldset': { borderColor: '#e0e0e0' }
+                                                                                borderRadius: 2, backgroundColor: 'white', fontSize: '0.85rem',
+                                                                                '& input': { padding: '8px 12px', textAlign: 'right' },
+                                                                                '& fieldset': { borderColor: '#1e40af', borderWidth: 2 }
                                                                             }
                                                                         }}
                                                                     />
                                                                 </TableCell>
-
-                                                                {/* ? CELL QTY: TextField diperbesar pad-nya */}
                                                                 <TableCell align="center" sx={{ py: 1.5, px: 1 }}>
                                                                     <TextField
                                                                         fullWidth
@@ -346,31 +381,34 @@ export default function EditView() {
                                                                         onChange={(e) => setEditForm({ ...editForm, qty: e.target.value })}
                                                                         sx={{
                                                                             '& .MuiOutlinedInput-root': {
-                                                                                fontSize: '0.85rem',
-                                                                                '& input': { padding: '10px 14px', textAlign: 'center' },
-                                                                                '& fieldset': { borderColor: '#e0e0e0' }
+                                                                                borderRadius: 2, backgroundColor: 'white', fontSize: '0.85rem',
+                                                                                '& input': { padding: '8px 12px', textAlign: 'center' },
+                                                                                '& fieldset': { borderColor: '#1e40af', borderWidth: 2 }
                                                                             }
                                                                         }}
                                                                     />
                                                                 </TableCell>
-
-                                                                <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.85rem', py: 1.5, color: 'primary.main' }}>
+                                                                <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.85rem', py: 1.5, color: '#1e40af', fontFamily: 'monospace' }}>
                                                                     {formatRupiah(currentRowTotal)}
                                                                 </TableCell>
                                                                 <TableCell align="center" sx={{ py: 1.5 }}>
-                                                                    <Tooltip title="Simpan"><IconButton color="primary" size="small" onClick={() => saveEdit(record.id)}><SaveIcon /></IconButton></Tooltip>
+                                                                    <Tooltip title="Simpan"><IconButton color="success" size="small" onClick={() => saveEdit(record.id)}><SaveIcon /></IconButton></Tooltip>
                                                                     <Tooltip title="Batal"><IconButton color="default" size="small" onClick={cancelEdit}><CancelIcon /></IconButton></Tooltip>
                                                                 </TableCell>
                                                             </>
                                                         ) : (
                                                             <>
-                                                                <TableCell sx={{ fontWeight: 500, fontSize: '0.8rem', py: 1 }}>{item.sku}</TableCell>
-                                                                <TableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 500, fontSize: '0.8rem', py: 1 }}>{formatRupiah(item.harga)}</TableCell>
-                                                                <TableCell align="center" sx={{ py: 1 }}><Chip label={item.qty} size="small" color="primary" variant="outlined" sx={{ height: 20, fontSize: '0.7rem' }} /></TableCell>
-                                                                <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.8rem', py: 1 }}>{formatRupiah(item.harga * item.qty)}</TableCell>
-                                                                <TableCell align="center" sx={{ py: 1 }}>
-                                                                    <Tooltip title="Edit"><IconButton color="primary" size="small" onClick={() => startEdit(record.id, item)}><EditIcon /></IconButton></Tooltip>
-                                                                    <Tooltip title="Hapus"><IconButton color="error" size="small" onClick={() => handleDeleteItem(record.id, item.id)}><DeleteIcon /></IconButton></Tooltip>
+                                                                <TableCell sx={{ fontWeight: 500, fontSize: '0.85rem', py: 1.5, color: '#334155' }}>{item.sku}</TableCell>
+                                                                <TableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 500, fontSize: '0.85rem', py: 1.5, color: '#334155' }}>{formatRupiah(item.harga)}</TableCell>
+                                                                <TableCell align="center" sx={{ py: 1.5 }}>
+                                                                    <Chip label={item.qty} size="small" sx={{ height: 24, fontSize: '0.75rem', fontWeight: 'bold', bgcolor: '#f1f5f9', color: '#334155' }} />
+                                                                </TableCell>
+                                                                <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.85rem', py: 1.5, color: '#1e40af', fontFamily: 'monospace' }}>
+                                                                    {formatRupiah(item.harga * item.qty)}
+                                                                </TableCell>
+                                                                <TableCell align="center" sx={{ py: 1.5 }}>
+                                                                    <Tooltip title="Edit"><IconButton color="primary" size="small" onClick={() => startEdit(record.id, item)} sx={{ '&:hover': { bgcolor: '#eff6ff' } }}><EditIcon /></IconButton></Tooltip>
+                                                                    <Tooltip title="Hapus"><IconButton color="error" size="small" onClick={() => handleDeleteItem(record.id, item.id)} sx={{ '&:hover': { bgcolor: '#fee2e2' } }}><DeleteIcon /></IconButton></Tooltip>
                                                                 </TableCell>
                                                             </>
                                                         )}
@@ -378,78 +416,97 @@ export default function EditView() {
                                                 );
                                             })}
 
-                                            {/* ? Render Baris Baru (Tambah Item) - Juga diperbesar pad-nya */}
+                                            {/* Render Baris Baru (Tambah Item) */}
                                             {isAddingNew && (
-                                                <TableRow sx={{ backgroundColor: '#f0fff4' }}>
-                                                    <TableCell sx={{ py: 1.5, px: 1 }}>
-                                                        <Select
-                                                            fullWidth
-                                                            value={editForm.sku}
-                                                            onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })}
-                                                            sx={{
-                                                                fontSize: '0.85rem',
-                                                                '& .MuiSelect-select': { py: 1.2, px: 1.5 },
-                                                                '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e0e0e0' }
-                                                            }}
-                                                        >
-                                                            <MenuItem value="" disabled>Pilih SKU</MenuItem>
-                                                            {skuList.map(s => <MenuItem key={s} value={s} sx={{ fontSize: '0.85rem' }}>{s}</MenuItem>)}
-                                                        </Select>
-                                                    </TableCell>
-                                                    <TableCell align="right" sx={{ py: 1.5, px: 1 }}>
-                                                        <TextField
-                                                            fullWidth
-                                                            value={editForm.harga}
-                                                            onChange={handleEditHargaChange}
-                                                            placeholder="0"
-                                                            sx={{
-                                                                '& .MuiOutlinedInput-root': {
-                                                                    fontSize: '0.85rem',
-                                                                    '& input': { padding: '10px 14px' },
-                                                                    '& fieldset': { borderColor: '#e0e0e0' }
-                                                                }
-                                                            }}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell align="center" sx={{ py: 1.5, px: 1 }}>
-                                                        <TextField
-                                                            fullWidth
-                                                            type="number"
-                                                            value={editForm.qty}
-                                                            onChange={(e) => setEditForm({ ...editForm, qty: e.target.value })}
-                                                            placeholder="0"
-                                                            sx={{
-                                                                '& .MuiOutlinedInput-root': {
-                                                                    fontSize: '0.85rem',
-                                                                    '& input': { padding: '10px 14px', textAlign: 'center' },
-                                                                    '& fieldset': { borderColor: '#e0e0e0' }
-                                                                }
-                                                            }}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.85rem', py: 1.5, color: 'success.main' }}>
-                                                        {formatRupiah((parseInt(editForm.harga.replace(/\./g, ''), 10) || 0) * (parseInt(editForm.qty, 10) || 0))}
-                                                    </TableCell>
-                                                    <TableCell align="center" sx={{ py: 1.5 }}>
-                                                        <Tooltip title="Simpan Item Baru"><IconButton color="success" size="small" onClick={() => saveEdit(record.id)}><SaveIcon /></IconButton></Tooltip>
-                                                        <Tooltip title="Batal"><IconButton color="default" size="small" onClick={cancelEdit}><CancelIcon /></IconButton></Tooltip>
-                                                    </TableCell>
-                                                </TableRow>
+                                                <Fade in timeout={300}>
+                                                    <TableRow sx={{ backgroundColor: '#f0fdf4' }}>
+                                                        <TableCell sx={{ py: 1.5, px: 1 }}>
+                                                            <Select
+                                                                fullWidth
+                                                                value={editForm.sku}
+                                                                onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })}
+                                                                sx={{
+                                                                    borderRadius: 2, backgroundColor: 'white', fontSize: '0.85rem',
+                                                                    '& .MuiSelect-select': { py: 1, px: 1.5 },
+                                                                    '& .MuiOutlinedInput-notchedOutline': { borderColor: '#16a34a', borderWidth: 2 }
+                                                                }}
+                                                            >
+                                                                <MenuItem value="" disabled>Pilih SKU</MenuItem>
+                                                                {skuList.map(s => <MenuItem key={s} value={s} sx={{ fontSize: '0.85rem' }}>{s}</MenuItem>)}
+                                                            </Select>
+                                                        </TableCell>
+                                                        <TableCell align="right" sx={{ py: 1.5, px: 1 }}>
+                                                            <TextField
+                                                                fullWidth
+                                                                value={editForm.harga}
+                                                                onChange={handleEditHargaChange}
+                                                                placeholder="0"
+                                                                sx={{
+                                                                    '& .MuiOutlinedInput-root': {
+                                                                        borderRadius: 2, backgroundColor: 'white', fontSize: '0.85rem',
+                                                                        '& input': { padding: '8px 12px', textAlign: 'right' },
+                                                                        '& fieldset': { borderColor: '#16a34a', borderWidth: 2 }
+                                                                    }
+                                                                }}
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell align="center" sx={{ py: 1.5, px: 1 }}>
+                                                            <TextField
+                                                                fullWidth
+                                                                type="number"
+                                                                value={editForm.qty}
+                                                                onChange={(e) => setEditForm({ ...editForm, qty: e.target.value })}
+                                                                placeholder="0"
+                                                                sx={{
+                                                                    '& .MuiOutlinedInput-root': {
+                                                                        borderRadius: 2, backgroundColor: 'white', fontSize: '0.85rem',
+                                                                        '& input': { padding: '8px 12px', textAlign: 'center' },
+                                                                        '& fieldset': { borderColor: '#16a34a', borderWidth: 2 }
+                                                                    }
+                                                                }}
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.85rem', py: 1.5, color: '#16a34a', fontFamily: 'monospace' }}>
+                                                            {formatRupiah((parseInt(editForm.harga.replace(/\./g, ''), 10) || 0) * (parseInt(editForm.qty, 10) || 0))}
+                                                        </TableCell>
+                                                        <TableCell align="center" sx={{ py: 1.5 }}>
+                                                            <Tooltip title="Simpan Item Baru"><IconButton color="success" size="small" onClick={() => saveEdit(record.id)}><SaveIcon /></IconButton></Tooltip>
+                                                            <Tooltip title="Batal"><IconButton color="default" size="small" onClick={cancelEdit}><CancelIcon /></IconButton></Tooltip>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                </Fade>
                                             )}
                                         </TableBody>
                                     </Table>
                                 </TableContainer>
 
                                 {/* Grand Total Footer */}
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1.5, pt: 1.5, borderTop: '2px dashed #f0f0f0', px: 1 }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <WalletIcon sx={{ color: 'primary.main', fontSize: 20 }} />
-                                        <Typography variant="body2" fontWeight="bold" color="text.secondary" sx={{ fontSize: '0.8rem' }}>GRAND TOTAL</Typography>
+                                <Paper elevation={0} sx={{
+                                    mt: 2, p: 2, borderRadius: 3,
+                                    background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                                    border: '1px solid rgba(30, 64, 175, 0.15)'
+                                }}>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                            <Avatar sx={{ bgcolor: '#1e40af', width: 40, height: 40, boxShadow: '0 4px 12px rgba(30, 64, 175, 0.2)' }}>
+                                                <WalletIcon sx={{ fontSize: 22 }} />
+                                            </Avatar>
+                                            <Box>
+                                                <Typography variant="caption" color="#1e40af" sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                    Grand Total
+                                                </Typography>
+                                            </Box>
+                                        </Box>
+                                        <Typography variant="body1" fontWeight="bold" color="#1e40af" sx={{
+                                            fontSize: '1.2rem', fontFamily: 'monospace',
+                                            backgroundColor: 'white', px: 2.5, py: 1, borderRadius: 2,
+                                            boxShadow: '0 2px 8px rgba(30, 64, 175, 0.1)',
+                                            border: '1px solid #bfdbfe'
+                                        }}>
+                                            Rp {formatRupiah(grandTotal)}
+                                        </Typography>
                                     </Box>
-                                    <Typography variant="body1" fontWeight="bold" color="primary" sx={{ fontSize: '1rem', fontFamily: 'monospace', backgroundColor: '#fff5f5', px: 1.5, py: 0.5, borderRadius: 2 }}>
-                                        Rp {formatRupiah(grandTotal)}
-                                    </Typography>
-                                </Box>
+                                </Paper>
 
                                 {/* Tombol Tambah Item */}
                                 {!isAddingNew && editingItem?.recordId !== record.id && (
@@ -459,13 +516,10 @@ export default function EditView() {
                                         startIcon={<AddIcon />}
                                         onClick={() => handleAddItem(record.id)}
                                         sx={{
-                                            mt: 1.5,
-                                            py: 1,
-                                            borderRadius: 2,
-                                            textTransform: 'none',
-                                            fontSize: '0.8rem',
-                                            borderStyle: 'dashed',
-                                            color: 'text.secondary'
+                                            mt: 2, py: 1.5, borderRadius: 3, textTransform: 'none', fontSize: '0.9rem', fontWeight: 600,
+                                            borderStyle: 'dashed', borderWidth: 2, borderColor: '#cbd5e1', color: '#64748b',
+                                            transition: 'all 0.3s ease',
+                                            '&:hover': { borderColor: '#1e40af', color: '#1e40af', backgroundColor: '#eff6ff', borderStyle: 'dashed' }
                                         }}
                                     >
                                         Tambah Item SKU (Jika Ada yang Tertinggal)
@@ -478,8 +532,10 @@ export default function EditView() {
                 );
             })}
 
-            <Snackbar open={snackbar.open} autoHideDuration={2500} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-                <Alert severity={snackbar.severity} variant="filled" sx={{ width: '100%', borderRadius: 2, fontSize: '0.85rem' }}>{snackbar.message}</Alert>
+            <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
+                <Alert severity={snackbar.severity} variant="filled" sx={{ width: '100%', borderRadius: 3, fontSize: '0.9rem', fontWeight: 600, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+                    {snackbar.message}
+                </Alert>
             </Snackbar>
         </Box>
     );

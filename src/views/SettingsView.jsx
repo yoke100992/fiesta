@@ -3,13 +3,14 @@ import {
     Box, Paper, TextField, Button,
     Table, TableBody, TableCell, TableContainer, TableRow,
     IconButton, Snackbar, Alert, Typography, Divider, Stack,
-    Chip, LinearProgress, Tooltip
+    LinearProgress, Tooltip, Avatar, Fade
 } from '@mui/material';
 import {
     Delete as DeleteIcon, Add as AddIcon,
     Download as DownloadIcon, Upload as UploadIcon,
     Group as GroupIcon, Inventory as InventoryIcon,
-    ShoppingCart as CartIcon, Info as InfoIcon
+    ShoppingCart as CartIcon, Info as InfoIcon,
+    Lock as LockIcon
 } from '@mui/icons-material';
 import { ref, push, set, get } from 'firebase/database';
 import { db } from '../utils/firebase';
@@ -25,7 +26,6 @@ const parseCSV = (text) => {
     const result = [];
 
     for (let i = 1; i < lines.length; i++) {
-        // Handle simple CSV (tanpa koma di dalam nilai)
         const values = lines[i].split(',');
         if (values.length >= headers.length) {
             const obj = {};
@@ -56,7 +56,6 @@ const downloadTemplate = (type) => {
         filename = 'template_sellout.csv';
     }
 
-    // Tambahkan BOM agar Excel membaca UTF-8 dengan benar
     const BOM = '\uFEFF';
     const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
@@ -70,30 +69,31 @@ const downloadTemplate = (type) => {
 };
 
 export default function SettingsView() {
-    // State untuk Manual Input
+    // --- PASSWORD STATE ---
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [passwordInput, setPasswordInput] = useState('');
+    const [passwordError, setPasswordError] = useState(false);
+
+    // --- DATA STATE ---
     const [newNama, setNewNama] = useState('');
     const [newSku, setNewSku] = useState('');
     const [namaList, setNamaList] = useState([]);
     const [skuList, setSkuList] = useState([]);
 
-    // State untuk Bulk Upload
+    // --- UPLOAD STATE ---
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
-
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
     const fileInputRef = useRef(null);
     const [activeUploadType, setActiveUploadType] = useState('');
 
-    // Load Data Awal
     const loadData = async () => {
         try {
             const namaSnap = await get(ref(db, 'nama'));
             const skuSnap = await get(ref(db, 'sku'));
-
             const namaData = namaSnap.exists() ? Object.values(namaSnap.val()) : [];
             const skuData = skuSnap.exists() ? Object.values(skuSnap.val()) : [];
-
             setNamaList(namaData.sort());
             setSkuList(skuData.sort());
         } catch (error) {
@@ -105,7 +105,16 @@ export default function SettingsView() {
         loadData();
     }, []);
 
-    // --- Manual Add/Delete ---
+    const handlePasswordSubmit = () => {
+        if (passwordInput === 'Yoke1009') {
+            setIsAuthenticated(true);
+            setPasswordError(false);
+        } else {
+            setPasswordError(true);
+        }
+    };
+
+    // --- MANUAL ADD/DELETE ---
     const handleAddNama = async () => {
         if (!newNama.trim()) return;
         try {
@@ -168,7 +177,7 @@ export default function SettingsView() {
         }
     };
 
-    // --- Bulk Upload Logic ---
+    // --- BULK UPLOAD LOGIC ---
     const handleFileUpload = async (event) => {
         const file = event.target.files[0];
         if (!file) return;
@@ -194,7 +203,6 @@ export default function SettingsView() {
                         if (row.sku) await push(ref(db, 'sku'), row.sku);
                     }
                 } else if (activeUploadType === 'sellout') {
-                    // Grouping data sellout berdasarkan tanggal+nama+toko
                     const grouped = {};
                     rows.forEach(row => {
                         if (!row.tanggal || !row.nama || !row.sku) return;
@@ -244,124 +252,205 @@ export default function SettingsView() {
         fileInputRef.current.click();
     };
 
-    return (
-        <Box sx={{ pb: 4 }}>
+    // ==========================================
+    // RENDER: PASSWORD SCREEN
+    // ==========================================
+    if (!isAuthenticated) {
+        return (
+            <Box sx={{
+                display: 'flex', justifyContent: 'center', alignItems: 'center',
+                minHeight: '80vh', pb: 8
+            }}>
+                <Fade in timeout={500}>
+                    <Paper elevation={0} sx={{
+                        p: { xs: 3, md: 4 }, borderRadius: 4, width: '100%', maxWidth: 420,
+                        border: '1px solid rgba(30, 64, 175, 0.1)',
+                        boxShadow: '0 8px 32px rgba(30, 64, 175, 0.08)',
+                        textAlign: 'center', background: 'white'
+                    }}>
+                        <Avatar sx={{
+                            bgcolor: '#eff6ff', color: '#1e40af', width: 72, height: 72,
+                            mx: 'auto', mb: 2.5, boxShadow: '0 4px 12px rgba(30, 64, 175, 0.1)'
+                        }}>
+                            <LockIcon sx={{ fontSize: 36 }} />
+                        </Avatar>
+                        <Typography variant="h6" fontWeight="bold" sx={{ color: '#1e293b', mb: 1 }}>
+                            Akses Terbatas
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 3, px: 2 }}>
+                            Masukkan password admin untuk mengakses halaman pengaturan data.
+                        </Typography>
 
+                        <TextField
+                            fullWidth
+                            type="password"
+                            placeholder="Masukkan password..."
+                            value={passwordInput}
+                            onChange={(e) => {
+                                setPasswordInput(e.target.value);
+                                setPasswordError(false);
+                            }}
+                            onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()}
+                            error={passwordError}
+                            helperText={passwordError ? 'Password salah, silakan coba lagi.' : ''}
+                            sx={{
+                                mb: 2.5,
+                                '& .MuiOutlinedInput-root': {
+                                    borderRadius: 3,
+                                    '& fieldset': { borderColor: '#e2e8f0' },
+                                    '&:hover fieldset': { borderColor: '#3b82f6' },
+                                    '&.Mui-focused fieldset': { borderColor: '#1e40af', borderWidth: 2 }
+                                }
+                            }}
+                        />
+
+                        <Button
+                            fullWidth
+                            variant="contained"
+                            onClick={handlePasswordSubmit}
+                            sx={{
+                                py: 1.8, borderRadius: 3, fontWeight: 'bold', textTransform: 'none', fontSize: '1rem',
+                                background: 'linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)',
+                                boxShadow: '0 4px 12px rgba(30, 64, 175, 0.3)',
+                                '&:hover': { background: 'linear-gradient(135deg, #1e3a8a 0%, #172554 100%)' }
+                            }}
+                        >
+                            Buka Pengaturan
+                        </Button>
+                    </Paper>
+                </Fade>
+            </Box>
+        );
+    }
+
+    // ==========================================
+    // RENDER: MAIN SETTINGS CONTENT
+    // ==========================================
+    return (
+        <Box sx={{ pb: 8 }}>
             {/* ========== BULK IMPORT / EXPORT SECTION ========== */}
             <Paper elevation={0} sx={{
-                p: 3, mb: 3, borderRadius: 4,
-                border: '1px solid rgba(227, 30, 36, 0.1)',
-                background: 'linear-gradient(135deg, #ffffff 0%, #fff8f8 100%)'
+                p: { xs: 2, md: 3 }, mb: 3, borderRadius: 4,
+                border: '1px solid rgba(30, 64, 175, 0.08)',
+                background: 'white',
+                boxShadow: '0 2px 12px rgba(30, 64, 175, 0.04)'
             }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-                    <Box sx={{ bgcolor: 'primary.main', p: 1, borderRadius: 2 }}>
-                        <UploadIcon sx={{ color: 'white', fontSize: 24 }} />
-                    </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
+                    <Avatar sx={{ bgcolor: '#1e40af', width: 44, height: 44, boxShadow: '0 4px 12px rgba(30, 64, 175, 0.3)' }}>
+                        <UploadIcon sx={{ fontSize: 22 }} />
+                    </Avatar>
                     <Box>
-                        <Typography variant="h6" fontWeight="bold" color="primary" sx={{ fontSize: '1.1rem', lineHeight: 1.2 }}>
+                        <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1.1rem', color: '#1e40af', lineHeight: 1.2 }}>
                             Bulk Import & Export Data
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">Inject data massal via CSV</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            Inject data massal dengan cepat via file CSV
+                        </Typography>
                     </Box>
                 </Box>
-                <Divider sx={{ mb: 3 }} />
+                <Divider sx={{ mb: 2.5 }} />
 
-                <Stack spacing={2}>
+                <Stack spacing={2.5}>
                     {/* Info Box */}
                     <Box sx={{
-                        p: 2, borderRadius: 2, bgcolor: '#e3f2fd',
-                        border: '1px solid #90caf9', display: 'flex', gap: 1.5
+                        p: 2, borderRadius: 3, bgcolor: '#eff6ff',
+                        border: '1px solid #bfdbfe', display: 'flex', gap: 1.5, alignItems: 'flex-start'
                     }}>
-                        <InfoIcon sx={{ color: '#1976d2', mt: 0.5 }} />
-                        <Typography variant="body2" sx={{ color: '#0d47a1', fontSize: '0.85rem' }}>
-                            <strong>Cara Pakai:</strong> Download template di bawah, isi data di Excel, simpan sebagai CSV, lalu upload kembali.
-                            Pastikan tidak ada koma (,) di dalam nama toko atau nama SPG.
+                        <InfoIcon sx={{ color: '#1e40af', mt: 0.2, flexShrink: 0 }} />
+                        <Typography variant="body2" sx={{ color: '#1e3a8a', fontSize: '0.85rem', lineHeight: 1.6 }}>
+                            <strong>Cara Pakai:</strong> Download template di bawah, isi data di Excel, simpan sebagai <strong>CSV UTF-8</strong>, lalu upload kembali.
+                            Pastikan tidak ada koma (,) di dalam nama toko atau nama SPG agar tidak terjadi error parsing.
                         </Typography>
                     </Box>
 
                     {/* Grid Buttons */}
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2 }}>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2.5 }}>
+                        {['nama', 'sku', 'sellout'].map((type) => {
+                            const config = {
+                                nama: { icon: <GroupIcon sx={{ fontSize: 40, color: '#1e40af' }} />, title: 'Master Nama SPG', desc: 'Kelola daftar nama' },
+                                sku: { icon: <InventoryIcon sx={{ fontSize: 40, color: '#1e40af' }} />, title: 'Master SKU', desc: 'Kelola daftar produk' },
+                                sellout: { icon: <CartIcon sx={{ fontSize: 40, color: '#1e40af' }} />, title: 'Data Penjualan', desc: 'Inject data transaksi' }
+                            }[type];
 
-                        {/* Card Nama */}
-                        <Paper sx={{ p: 2, borderRadius: 3, border: '1px solid #f0f0f0', textAlign: 'center' }}>
-                            <GroupIcon sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
-                            <Typography fontWeight="bold" sx={{ mb: 2 }}>Master Nama</Typography>
-                            <Button variant="outlined" fullWidth startIcon={<DownloadIcon />} onClick={() => downloadTemplate('nama')} sx={{ mb: 1, borderRadius: 2, textTransform: 'none' }}>
-                                Download Template
-                            </Button>
-                            <Button variant="contained" fullWidth startIcon={<UploadIcon />} onClick={() => triggerFileInput('nama')} disabled={uploading} sx={{ borderRadius: 2, textTransform: 'none' }}>
-                                Upload CSV
-                            </Button>
-                        </Paper>
+                            return (
+                                <Paper key={type} sx={{
+                                    p: 3, borderRadius: 4, border: '1px solid #e2e8f0', textAlign: 'center',
+                                    transition: 'all 0.3s ease',
+                                    '&:hover': { borderColor: '#1e40af', boxShadow: '0 8px 24px rgba(30, 64, 175, 0.08)', transform: 'translateY(-2px)' }
+                                }}>
+                                    <Box sx={{ mb: 2 }}>{config.icon}</Box>
+                                    <Typography fontWeight="bold" sx={{ mb: 0.5, color: '#1e293b' }}>{config.title}</Typography>
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>{config.desc}</Typography>
 
-                        {/* Card SKU */}
-                        <Paper sx={{ p: 2, borderRadius: 3, border: '1px solid #f0f0f0', textAlign: 'center' }}>
-                            <InventoryIcon sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
-                            <Typography fontWeight="bold" sx={{ mb: 2 }}>Master SKU</Typography>
-                            <Button variant="outlined" fullWidth startIcon={<DownloadIcon />} onClick={() => downloadTemplate('sku')} sx={{ mb: 1, borderRadius: 2, textTransform: 'none' }}>
-                                Download Template
-                            </Button>
-                            <Button variant="contained" fullWidth startIcon={<UploadIcon />} onClick={() => triggerFileInput('sku')} disabled={uploading} sx={{ borderRadius: 2, textTransform: 'none' }}>
-                                Upload CSV
-                            </Button>
-                        </Paper>
-
-                        {/* Card Sellout */}
-                        <Paper sx={{ p: 2, borderRadius: 3, border: '1px solid #f0f0f0', textAlign: 'center' }}>
-                            <CartIcon sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
-                            <Typography fontWeight="bold" sx={{ mb: 2 }}>Data Penjualan</Typography>
-                            <Button variant="outlined" fullWidth startIcon={<DownloadIcon />} onClick={() => downloadTemplate('sellout')} sx={{ mb: 1, borderRadius: 2, textTransform: 'none' }}>
-                                Download Template
-                            </Button>
-                            <Button variant="contained" fullWidth startIcon={<UploadIcon />} onClick={() => triggerFileInput('sellout')} disabled={uploading} sx={{ borderRadius: 2, textTransform: 'none' }}>
-                                Upload CSV
-                            </Button>
-                        </Paper>
-
+                                    <Button
+                                        variant="outlined" fullWidth startIcon={<DownloadIcon />}
+                                        onClick={() => downloadTemplate(type)}
+                                        sx={{ mb: 1.5, borderRadius: 2.5, textTransform: 'none', fontWeight: 600, borderColor: '#cbd5e1', color: '#475569', '&:hover': { borderColor: '#1e40af', color: '#1e40af', bgcolor: '#eff6ff' } }}
+                                    >
+                                        Download Template
+                                    </Button>
+                                    <Button
+                                        variant="contained" fullWidth startIcon={<UploadIcon />}
+                                        onClick={() => triggerFileInput(type)} disabled={uploading}
+                                        sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 600, background: 'linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)', '&:hover': { background: 'linear-gradient(135deg, #1e3a8a 0%, #172554 100%)' } }}
+                                    >
+                                        Upload CSV
+                                    </Button>
+                                </Paper>
+                            );
+                        })}
                     </Box>
 
                     {uploading && (
-                        <Box sx={{ mt: 2 }}>
-                            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>Sedang mengupload data...</Typography>
-                            <LinearProgress variant="determinate" value={uploadProgress} sx={{ borderRadius: 2, height: 8 }} />
+                        <Box sx={{ mt: 1 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                <Typography variant="caption" color="text.secondary" fontWeight={600}>Sedang mengupload data...</Typography>
+                                <Typography variant="caption" color="#1e40af" fontWeight={700}>{uploadProgress}%</Typography>
+                            </Box>
+                            <LinearProgress variant="determinate" value={uploadProgress} sx={{ borderRadius: 2, height: 8, bgcolor: '#dbeafe', '& .MuiLinearProgress-bar': { bgcolor: '#1e40af' } }} />
                         </Box>
                     )}
                 </Stack>
             </Paper>
 
             {/* Hidden File Input */}
-            <input
-                type="file"
-                accept=".csv"
-                ref={fileInputRef}
-                style={{ display: 'none' }}
-                onChange={handleFileUpload}
-            />
+            <input type="file" accept=".csv" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileUpload} />
 
             {/* ========== MANUAL INPUT NAMA ========== */}
-            <Paper elevation={0} sx={{ p: 3, mb: 3, borderRadius: 4, boxShadow: '0 2px 12px rgba(0,0,0,0.04)', border: '1px solid #f0f0f0' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-                    <Box sx={{ bgcolor: '#ffebee', p: 1, borderRadius: 2 }}>
-                        <GroupIcon sx={{ color: 'primary.main', fontSize: 20 }} />
-                    </Box>
-                    <Typography variant="h6" fontWeight="bold" color="primary" sx={{ fontSize: '1rem' }}>Kelola Nama SPG</Typography>
+            <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, mb: 3, borderRadius: 4, boxShadow: '0 2px 12px rgba(30, 64, 175, 0.04)', border: '1px solid rgba(30, 64, 175, 0.08)' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
+                    <Avatar sx={{ bgcolor: '#eff6ff', width: 40, height: 40 }}>
+                        <GroupIcon sx={{ color: '#1e40af', fontSize: 20 }} />
+                    </Avatar>
+                    <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1.05rem', color: '#1e40af' }}>Kelola Nama SPG</Typography>
                 </Box>
 
-                <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-                    <TextField size="small" fullWidth value={newNama} onChange={(e) => setNewNama(e.target.value)} placeholder="Nama Baru" onKeyDown={(e) => e.key === 'Enter' && handleAddNama()} />
-                    <Button variant="contained" onClick={handleAddNama} startIcon={<AddIcon />} sx={{ borderRadius: 2, textTransform: 'none' }}>Tambah</Button>
+                <Box sx={{ display: 'flex', gap: 1.5, mb: 2.5 }}>
+                    <TextField
+                        size="small" fullWidth value={newNama} onChange={(e) => setNewNama(e.target.value)}
+                        placeholder="Ketik nama baru..."
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddNama()}
+                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2.5, '& fieldset': { borderColor: '#e2e8f0' } } }}
+                    />
+                    <Button variant="contained" onClick={handleAddNama} startIcon={<AddIcon />} sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 600, px: 3, background: '#1e40af', '&:hover': { background: '#1e3a8a' } }}>
+                        Tambah
+                    </Button>
                 </Box>
 
-                <TableContainer sx={{ borderRadius: 2, border: '1px solid #f0f0f0', maxHeight: 200 }}>
+                <TableContainer sx={{ borderRadius: 3, border: '1px solid #e2e8f0', maxHeight: 250 }}>
                     <Table size="small">
                         <TableBody>
                             {namaList.length === 0 ? (
-                                <TableRow><TableCell align="center" sx={{ py: 3, color: 'text.secondary' }}>Belum ada data</TableCell></TableRow>
+                                <TableRow><TableCell align="center" sx={{ py: 4, color: '#94a3b8', fontSize: '0.9rem' }}>Belum ada data nama</TableCell></TableRow>
                             ) : namaList.map(n => (
-                                <TableRow key={n} hover>
-                                    <TableCell sx={{ fontSize: '0.85rem' }}>{n}</TableCell>
-                                    <TableCell align="right">
-                                        <Tooltip title="Hapus"><IconButton color="error" size="small" onClick={() => handleDeleteNama(n)}><DeleteIcon sx={{ fontSize: 18 }} /></IconButton></Tooltip>
+                                <TableRow key={n} hover sx={{ '&:last-child td': { borderBottom: 0 } }}>
+                                    <TableCell sx={{ fontSize: '0.9rem', color: '#334155', py: 1.5 }}>{n}</TableCell>
+                                    <TableCell align="right" sx={{ py: 1.5 }}>
+                                        <Tooltip title="Hapus">
+                                            <IconButton color="error" size="small" onClick={() => handleDeleteNama(n)} sx={{ '&:hover': { bgcolor: '#fee2e2' } }}>
+                                                <DeleteIcon sx={{ fontSize: 18 }} />
+                                            </IconButton>
+                                        </Tooltip>
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -371,29 +460,40 @@ export default function SettingsView() {
             </Paper>
 
             {/* ========== MANUAL INPUT SKU ========== */}
-            <Paper elevation={0} sx={{ p: 3, mb: 3, borderRadius: 4, boxShadow: '0 2px 12px rgba(0,0,0,0.04)', border: '1px solid #f0f0f0' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-                    <Box sx={{ bgcolor: '#ffebee', p: 1, borderRadius: 2 }}>
-                        <InventoryIcon sx={{ color: 'primary.main', fontSize: 20 }} />
-                    </Box>
-                    <Typography variant="h6" fontWeight="bold" color="primary" sx={{ fontSize: '1rem' }}>Kelola Master SKU</Typography>
+            <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, mb: 3, borderRadius: 4, boxShadow: '0 2px 12px rgba(30, 64, 175, 0.04)', border: '1px solid rgba(30, 64, 175, 0.08)' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
+                    <Avatar sx={{ bgcolor: '#eff6ff', width: 40, height: 40 }}>
+                        <InventoryIcon sx={{ color: '#1e40af', fontSize: 20 }} />
+                    </Avatar>
+                    <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1.05rem', color: '#1e40af' }}>Kelola Master SKU</Typography>
                 </Box>
 
-                <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-                    <TextField size="small" fullWidth value={newSku} onChange={(e) => setNewSku(e.target.value)} placeholder="SKU Baru" onKeyDown={(e) => e.key === 'Enter' && handleAddSku()} />
-                    <Button variant="contained" onClick={handleAddSku} startIcon={<AddIcon />} sx={{ borderRadius: 2, textTransform: 'none' }}>Tambah</Button>
+                <Box sx={{ display: 'flex', gap: 1.5, mb: 2.5 }}>
+                    <TextField
+                        size="small" fullWidth value={newSku} onChange={(e) => setNewSku(e.target.value)}
+                        placeholder="Ketik SKU baru..."
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddSku()}
+                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2.5, '& fieldset': { borderColor: '#e2e8f0' } } }}
+                    />
+                    <Button variant="contained" onClick={handleAddSku} startIcon={<AddIcon />} sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 600, px: 3, background: '#1e40af', '&:hover': { background: '#1e3a8a' } }}>
+                        Tambah
+                    </Button>
                 </Box>
 
-                <TableContainer sx={{ borderRadius: 2, border: '1px solid #f0f0f0', maxHeight: 200 }}>
+                <TableContainer sx={{ borderRadius: 3, border: '1px solid #e2e8f0', maxHeight: 250 }}>
                     <Table size="small">
                         <TableBody>
                             {skuList.length === 0 ? (
-                                <TableRow><TableCell align="center" sx={{ py: 3, color: 'text.secondary' }}>Belum ada data</TableCell></TableRow>
+                                <TableRow><TableCell align="center" sx={{ py: 4, color: '#94a3b8', fontSize: '0.9rem' }}>Belum ada data SKU</TableCell></TableRow>
                             ) : skuList.map(s => (
-                                <TableRow key={s} hover>
-                                    <TableCell sx={{ fontSize: '0.85rem', fontFamily: 'monospace' }}>{s}</TableCell>
-                                    <TableCell align="right">
-                                        <Tooltip title="Hapus"><IconButton color="error" size="small" onClick={() => handleDeleteSku(s)}><DeleteIcon sx={{ fontSize: 18 }} /></IconButton></Tooltip>
+                                <TableRow key={s} hover sx={{ '&:last-child td': { borderBottom: 0 } }}>
+                                    <TableCell sx={{ fontSize: '0.9rem', fontFamily: 'monospace', color: '#334155', py: 1.5 }}>{s}</TableCell>
+                                    <TableCell align="right" sx={{ py: 1.5 }}>
+                                        <Tooltip title="Hapus">
+                                            <IconButton color="error" size="small" onClick={() => handleDeleteSku(s)} sx={{ '&:hover': { bgcolor: '#fee2e2' } }}>
+                                                <DeleteIcon sx={{ fontSize: 18 }} />
+                                            </IconButton>
+                                        </Tooltip>
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -403,7 +503,9 @@ export default function SettingsView() {
             </Paper>
 
             <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
-                <Alert severity={snackbar.severity} variant="filled" sx={{ width: '100%', borderRadius: 2, fontWeight: 500 }}>{snackbar.message}</Alert>
+                <Alert severity={snackbar.severity} variant="filled" sx={{ width: '100%', borderRadius: 3, fontWeight: 600, fontSize: '0.9rem', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+                    {snackbar.message}
+                </Alert>
             </Snackbar>
         </Box>
     );
