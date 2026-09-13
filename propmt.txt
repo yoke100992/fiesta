@@ -1,0 +1,88 @@
+Halo 
+saya Yoke
+
+saya akan membuat data input sell out untuk SPG saya
+
+Design :
+Framework React, akan saya gunakan di vercell
+Library Material UI
+Web Mobile App responsive
+Nuansa warna merah Fiesta
+semua design professional modern
+
+Konsep :
+Ada 3 menu tab, Input data , View data/Download , Edit data , Settings (untuk master data kebutuhan dropdown di input data)
+
+Tab Input data :
+Step 1 :
+- Tanggal picker date 
+- Nama (list dropdown Ambil dari nama.json max list muncul 5 nama sort a to z)
+- Nama Toko : text box auto UPPER
+- Nama Toko (text input auto propper)
+
+Step 2 :
+- Upload foto grid wajib
+Foto masuk ke cloudinary :
+
+// ===== UPLOAD IMAGE (CLOUDINARY) =====
+export const uploadImage = async (file) => {
+  try {
+    if (!file) return "";
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    // 🔥 WAJIB sesuai Cloudinary
+    formData.append("upload_preset", "fiesta");
+
+    const res = await fetch(
+      "https://api.cloudinary.com/v1_1/dmookmsr/image/upload",
+      {
+        method: "POST",
+        body: formData
+      }
+    );
+
+    const data = await res.json();
+
+    if (!data.secure_url) {
+      console.error("Upload gagal:", data);
+      return "";
+    }
+
+    return data.secure_url;
+
+  } catch (err) {
+    console.error("Upload error:", err);
+    return "";
+  }
+};
+- Pilih SKU (list dropdown Ambil dari sku.json max list muncul 5 nama sort a to z)
+- Harga : text boxt hanya angka auto format #,### 
+- Qty :text boxt hanya angka
+
+tombol  add item : data nama sku, Harga, qty akan masuk ke table queque sebelum submit , di table bisa di delete ada tombol icon delet di paling kanan tiap barisnya
+
+jika semua oke, ada tombol submit paling bawah
+semua data input masuk ke sellout.json
+
+
+Tab View Data/Download
+
+- terdapat table pivot setiap nama terdapat sellout setiap tanggalnya
+- filter by nama
+
+Tab Edit data
+- Filter nama
+- filter tanggal
+- klik ok
+
+muncul Foto , list sku , Harga , qty dalam table bisa di edit/hapus, lalu ada tombol update dibawah table untuk simpan
+
+Tab Settings
+
+Ada table Nama untuk menyimpan ke nama.json dan bisa ditambahkan serta hapus
+ada table SKU untuk menyimpan ke sku.json dan bisa ditambahkan serta hapus
+
+jangan lupa memakai pop up modern profesional ui di setiap notifikasi nya agar jelas dan tidak terjadi double input
+tolong berikan full skrip nya yah dan jelaskan juga location struktur direktori nya
