@@ -278,7 +278,7 @@ export default function SettingsView() {
                             Akses Terbatas
                         </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 3, px: 2 }}>
-                            Masukkan password admin untuk mengakses halaman pengaturan data.
+                            Masukkan password untuk mengakses halaman pengaturan data.
                         </Typography>
 
                         <TextField
