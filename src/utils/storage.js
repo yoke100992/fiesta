@@ -91,3 +91,27 @@ export const updateSellout = async (id, data) => {
 export const deleteSellout = async (id) => {
     await remove(ref(db, `sellout/${id}`));
 };
+
+// ===== PERMIT =====
+export const getPermitData = async () => {
+    try {
+        const snapshot = await get(ref(db, 'permit'));
+        if (!snapshot.exists()) return [];
+        const data = snapshot.val();
+        return Object.entries(data).map(([id, value]) => ({ id, ...value }));
+    } catch (err)  {
+        console.error('Error get permit:', err);
+        return [];
+    }
+};
+
+// ✅ FUNGSI BARU: Tambah Permit
+export const addPermit = async (data) => {
+    const newRef = push(ref(db, 'permit'));
+    await set(newRef, data);
+};
+
+// ✅ FUNGSI BARU: Hapus Permit
+export const deletePermit = async (id) => {
+    await remove(ref(db, `permit/${id}`));
+};
