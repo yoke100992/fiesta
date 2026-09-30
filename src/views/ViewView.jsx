@@ -359,10 +359,10 @@ export default function ViewView() {
             setSelectedDate(dateStr);
         } else {
             setPermitDialog({ open: true, dateStr });
-            setPermitForm({ 
-                nama: filterNama || '', 
-                jenis: 'Sakit', 
-                catatan: '' 
+            setPermitForm({
+                nama: filterNama || '',
+                jenis: 'Sakit',
+                catatan: ''
             });
         }
     };
@@ -516,66 +516,172 @@ export default function ViewView() {
     };
 
     const handleDownloadRaw = async () => {
-        if (Object.keys(pivotData).length === 0) { setSnackbar({ open: true, message: 'Tidak ada data', severity: 'warning' }); return; }
-        setIsDownloading(true);
-        try {
-            const workbook = new ExcelJS.Workbook();
-            const ws = workbook.addWorksheet('Raw Data Sell Out');
-            const allRecords = [];
-            Object.values(pivotData).forEach(nd => nd.records.forEach(r => allRecords.push(r)));
-            allRecords.sort((a, b) => { const dc = parseAnyDate(a.tanggal) - parseAnyDate(b.tanggal); if (dc !== 0) return dc; return (a.nama || '').localeCompare(b.nama || ''); });
-            const headers = ['No', 'Tanggal', 'Nama SPG', 'Nama Toko', 'SKU', 'Harga', 'Qty', 'Total'];
-            if (includePhotos) headers.push('Foto');
-            const hr = ws.addRow(headers); hr.height = 28; hr.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } }; hr.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } }; hr.alignment = { vertical: 'middle', horizontal: 'center' }; hr.eachCell(c => { c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }; });
-            ws.getColumn(1).width = 6; ws.getColumn(2).width = 14; ws.getColumn(3).width = 20; ws.getColumn(4).width = 22; ws.getColumn(5).width = 25; ws.getColumn(6).width = 15; ws.getColumn(7).width = 8; ws.getColumn(8).width = 18;
-            if (includePhotos) ws.getColumn(9).width = 18;
-            const fotoCache = new Map();
-            if (includePhotos) {
-                const uf = new Set(); allRecords.forEach(r => { if (r.foto) uf.add(r.foto); });
-                const fa = Array.from(uf);
-                for (let i = 0; i < fa.length; i += 5) {
-                    await Promise.all(fa.slice(i, i + 5).map(async (url) => {
-                        const ab = await fetchImageWithCache(url);
-                        if (ab) { const c = await compressImage(ab, 0.9); if (c) fotoCache.set(url, { buffer: c, extension: getImageExtension(url) }); }
-                    }));
-                }
+    if (Object.keys(pivotData).length === 0) { setSnackbar({ open: true, message: 'Tidak ada data', severity: 'warning' }); return; }
+    setIsDownloading(true);
+    try {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Raw Data Sell Out');
+
+        // Kumpulkan & urutkan semua records
+        const allRecords = [];
+        Object.values(pivotData).forEach(nd => nd.records.forEach(r => allRecords.push(r)));
+        allRecords.sort((a, b) => {
+            const dc = parseAnyDate(a.tanggal) - parseAnyDate(b.tanggal);
+            if (dc !== 0) return dc;
+            return (a.nama || '').localeCompare(b.nama || '');
+        });
+
+        // Header
+        const headers = ['No', 'Tanggal', 'Nama SPG', 'Nama Toko', 'SKU', 'Harga', 'Qty', 'Total'];
+        if (includePhotos) headers.push('Foto');
+
+        const hr = ws.addRow(headers);
+        hr.height = 28;
+        hr.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+        hr.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } };
+        hr.alignment = { vertical: 'middle', horizontal: 'center' };
+        hr.eachCell(c => {
+            c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        });
+
+        // Set lebar kolom
+        ws.getColumn(1).width = 6;    // No
+        ws.getColumn(2).width = 14;   // Tanggal
+        ws.getColumn(3).width = 20;   // Nama SPG
+        ws.getColumn(4).width = 22;   // Nama Toko
+        ws.getColumn(5).width = 25;   // SKU
+        ws.getColumn(6).width = 15;   // Harga
+        ws.getColumn(7).width = 8;    // Qty
+        ws.getColumn(8).width = 18;   // Total
+        if (includePhotos) ws.getColumn(9).width = 18; // Foto
+
+        // Pre-fetch gambar
+        const fotoCache = new Map();
+        if (includePhotos) {
+            const uf = new Set();
+            allRecords.forEach(r => { if (r.foto) uf.add(r.foto); });
+            const fa = Array.from(uf);
+            for (let i = 0; i < fa.length; i += 5) {
+                await Promise.all(fa.slice(i, i + 5).map(async (url) => {
+                    const ab = await fetchImageWithCache(url);
+                    if (ab) {
+                        const c = await compressImage(ab, 0.9);
+                        if (c) fotoCache.set(url, { buffer: c, extension: getImageExtension(url) });
+                    }
+                }));
             }
-            let rn = 1, cer = 2, gta = 0;
-            for (const rec of allRecords) {
-                const store = rec.namaToko || rec.toko || rec.outlet || 'Toko Tidak Diketahui';
-                const items = rec.items || []; const fir = cer;
-                items.forEach((item, idx) => {
-                    const total = (item.harga || 0) * (item.qty || 0); gta += total;
-                    const rd = [idx === 0 ? rn : '', idx === 0 ? formatDateIndo(rec.tanggal) : '', idx === 0 ? rec.nama : '', idx === 0 ? store : '', item.sku, item.harga || 0, item.qty || 0, total];
-                    if (includePhotos) rd.push(idx === 0 ? 'Foto' : '');
-                    const row = ws.addRow(rd); row.height = idx === 0 && includePhotos ? 80 : 22; row.alignment = { vertical: 'middle', wrapText: true };
-                    row.eachCell((cell, cn) => {
-                        cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-                        if (cn === 1 || cn === 7) cell.alignment = { vertical: 'middle', horizontal: 'center' };
-                        else if (cn === 6 || cn === 8) { cell.alignment = { vertical: 'middle', horizontal: 'right' }; cell.numFmt = '#,##0'; }
-                        else cell.alignment = { vertical: 'middle', horizontal: 'left' };
-                        if (cn === 8) cell.font = { bold: true, color: { argb: 'FF1E40AF' } };
-                    });
-                    cer++;
+        }
+
+        let rn = 1, cer = 2, gta = 0;
+
+        for (const rec of allRecords) {
+            const store = rec.namaToko || rec.toko || rec.outlet || 'Toko Tidak Diketahui';
+            const items = rec.items || [];
+            const isFirstItemOfRecord = true;
+
+            // ✅ LOOP SETIAP ITEM - SEMUA DATA DIULANG (TANPA MERGE)
+            items.forEach((item, idx) => {
+                const total = (item.harga || 0) * (item.qty || 0);
+                gta += total;
+
+                // ✅ Setiap baris item punya data lengkap (tanggal, nama, toko diulang)
+                const rowData = [
+                    rn,                                      // No (sama untuk semua item dalam 1 record)
+                    formatDateIndo(rec.tanggal),             // Tanggal (diulang)
+                    rec.nama,                                // Nama SPG (diulang)
+                    store,                                   // Nama Toko (diulang)
+                    item.sku,                                // SKU
+                    item.harga || 0,                         // Harga
+                    item.qty || 0,                           // Qty
+                    total                                    // Total
+                ];
+
+                if (includePhotos) {
+                    // ✅ Foto hanya di baris pertama setiap record, baris lain kosong
+                    rowData.push(idx === 0 ? 'Foto' : '');
+                }
+
+                const row = ws.addRow(rowData);
+                row.height = idx === 0 && includePhotos ? 80 : 22;
+                row.alignment = { vertical: 'middle', wrapText: true };
+
+                row.eachCell((cell, cn) => {
+                    // Border semua cell
+                    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+
+                    // Alignment per kolom
+                    if (cn === 1 || cn === 7) {
+                        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                    } else if (cn === 6 || cn === 8) {
+                        cell.alignment = { vertical: 'middle', horizontal: 'right' };
+                        cell.numFmt = '#,##0';
+                    } else {
+                        cell.alignment = { vertical: 'middle', horizontal: 'left' };
+                    }
+
+                    // Font untuk Total
+                    if (cn === 8) cell.font = { bold: true, color: { argb: 'FF1E40AF' } };
+
+                    // Zebra stripe per record (bukan per item)
+                    if (rn % 2 === 0) {
+                        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+                    }
                 });
-                if (items.length > 1) { [1, 2, 3, 4].forEach(c => ws.mergeCells(fir, c, fir + items.length - 1, c)); if (includePhotos) ws.mergeCells(fir, 9, fir + items.length - 1, 9); }
-                if (includePhotos && rec.foto && fotoCache.has(rec.foto)) {
-                    try { const fd = fotoCache.get(rec.foto); const iid = workbook.addImage({ buffer: fd.buffer, extension: fd.extension }); ws.addImage(iid, { tl: { col: 8, row: fir - 1 }, ext: { width: 90, height: 90 } }); } catch (e) {}
+
+                // ✅ TAMBAHKAN FOTO hanya di baris pertama setiap record
+                if (includePhotos && idx === 0 && rec.foto && fotoCache.has(rec.foto)) {
+                    try {
+                        const fd = fotoCache.get(rec.foto);
+                        const iid = workbook.addImage({ buffer: fd.buffer, extension: fd.extension });
+                        ws.addImage(iid, {
+                            tl: { col: 8, row: cer - 1 },
+                            ext: { width: 90, height: 90 }
+                        });
+                    } catch (e) {
+                        console.error('Gagal tambah gambar:', e);
+                    }
                 }
-                rn++;
-            }
-            const trc = includePhotos ? 9 : 8;
-            const tr = ws.addRow([]); tr.height = 28;
-            ws.mergeCells(cer, 1, cer, trc - 1);
-            const tc = ws.getCell(cer, 1); tc.value = 'GRAND TOTAL'; tc.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } }; tc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } }; tc.alignment = { vertical: 'middle', horizontal: 'right' }; tc.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-            const gc = ws.getCell(cer, trc); gc.value = gta; gc.numFmt = '#,##0'; gc.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } }; gc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } }; gc.alignment = { vertical: 'middle', horizontal: 'right' }; gc.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-            ws.views = [{ state: 'frozen', ySplit: 1 }];
-            const buffer = await workbook.xlsx.writeBuffer();
-            saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `RawData_${formatDateLocal(startDate || new Date())}_to_${formatDateLocal(endDate || new Date())}${includePhotos ? '' : '_NO_FOTO'}.xlsx`);
-            setSnackbar({ open: true, message: 'Excel Raw Data berhasil didownload!', severity: 'success' });
-        } catch (error) { setSnackbar({ open: true, message: 'Gagal: ' + error.message, severity: 'error' }); }
-        finally { setIsDownloading(false); }
-    };
+
+                cer++;
+            });
+
+            rn++; // Increment nomor record setelah semua item diproses
+        }
+
+        // ✅ GRAND TOTAL ROW
+        const trc = includePhotos ? 9 : 8;
+        const tr = ws.addRow([]);
+        tr.height = 28;
+        ws.mergeCells(cer, 1, cer, trc - 1);
+        const tc = ws.getCell(cer, 1);
+        tc.value = 'GRAND TOTAL';
+        tc.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+        tc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
+        tc.alignment = { vertical: 'middle', horizontal: 'right' };
+        tc.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+
+        const gc = ws.getCell(cer, trc);
+        gc.value = gta;
+        gc.numFmt = '#,##0';
+        gc.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+        gc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
+        gc.alignment = { vertical: 'middle', horizontal: 'right' };
+        gc.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+
+        ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        saveAs(
+            new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+            `RawData_${formatDateLocal(startDate || new Date())}_to_${formatDateLocal(endDate || new Date())}${includePhotos ? '' : '_NO_FOTO'}.xlsx`
+        );
+        setSnackbar({ open: true, message: 'Excel Raw Data berhasil didownload!', severity: 'success' });
+    } catch (error) {
+        setSnackbar({ open: true, message: 'Gagal: ' + error.message, severity: 'error' });
+    } finally {
+        setIsDownloading(false);
+    }
+};
 
     const handleDownload = () => { if (reportFormat === 'pivot') handleDownloadPivot(); else handleDownloadRaw(); };
 
