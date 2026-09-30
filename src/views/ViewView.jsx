@@ -17,7 +17,7 @@ import {
     ExpandMore as ExpandMoreIcon,
     SentimentDissatisfied as InactiveIcon, CheckCircle as ActiveIcon,
     EventBusy as PermitIcon, BeachAccess as OffIcon, LocalHospital as SakitIcon,
-    NoteAdd as NoteIcon
+    NoteAdd as NoteIcon, Groups as MeetingIcon
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { getSelloutData, getNamaList, deleteSellout, getPermitData, addPermit, deletePermit } from '../utils/storage';
@@ -165,11 +165,32 @@ const generateWhatsAppReport = (record, dateStr) => {
     return report;
 };
 
-// ✅ KONFIGURASI PERMIT
+// ✅ KONFIGURASI PERMIT (Warna & Ikon Disesuaikan)
 const PERMIT_CONFIG = {
-    Sakit: { color: '#ef4444', bg: '#fee2e2', icon: SakitIcon, label: 'Sakit' },
-    Izin: { color: '#f59e0b', bg: '#fef3c7', icon: NoteIcon, label: 'Izin' },
-    Off: { color: '#64748b', bg: '#f1f5f9', icon: OffIcon, label: 'Off' }
+    Sakit: {
+        color: '#ef4444',       // Merah
+        bg: '#fee2e2',          // Merah Muda
+        icon: SakitIcon,
+        label: 'Sakit'
+    },
+    Izin: {
+        color: '#f59e0b',       // Kuning/Amber
+        bg: '#fef3c7',          // Kuning Muda
+        icon: NoteIcon,
+        label: 'Izin'
+    },
+    Off: {
+        color: '#64748b',       // Abu-abu/Slate
+        bg: '#f1f5f9',          // Abu-abu Muda
+        icon: OffIcon,
+        label: 'Off'
+    },
+    Meeting: {
+        color: '#6366f1',       // Indigo/Ungu Kebiruan
+        bg: '#e0e7ff',          // Indigo Muda
+        icon: MeetingIcon,      // Ikon Groups (Orang Banyak)
+        label: 'Meeting'
+    }
 };
 
 export default function ViewView() {
@@ -402,9 +423,14 @@ export default function ViewView() {
         }
     };
 
-    const getPermitsByDate = (dateStr) => {
-        return permitData.filter(p => p.tanggal === dateStr);
-    };
+    // SESUDAH (filter berdasarkan nama SPG yang dipilih)
+const getPermitsByDate = (dateStr) => {
+    return permitData.filter(p => {
+        if (p.tanggal !== dateStr) return false;
+        if (filterNama && p.nama !== filterNama) return false; // ✅ Filter nama
+        return true;
+    });
+};
 
     const handleDownloadPivot = async () => {
         if (Object.keys(pivotData).length === 0) { setSnackbar({ open: true, message: 'Tidak ada data', severity: 'warning' }); return; }
