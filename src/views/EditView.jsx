@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
     Box, Paper, Select, MenuItem, Button, TextField,
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
@@ -37,8 +37,13 @@ export default function EditView() {
     const [loading, setLoading] = useState(false);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
+    // State untuk edit item
     const [editingItem, setEditingItem] = useState(null);
     const [editForm, setEditForm] = useState({ sku: '', harga: '', qty: '' });
+
+    // ✅ STATE BARU: Untuk edit info record (Tanggal & Nama Toko)
+    const [editingRecord, setEditingRecord] = useState(null);
+    const [recordEditForm, setRecordEditForm] = useState({ tanggal: '', namaToko: '' });
 
     useEffect(() => {
         const load = async () => {
@@ -53,13 +58,11 @@ export default function EditView() {
     const handleSearch = async () => {
         setLoading(true);
         const data = await getSelloutData();
-
         const filtered = data.filter(d => {
             const matchNama = filterNama ? d.nama === filterNama : true;
             const matchDate = filterDate ? d.tanggal === formatDateLocal(filterDate) : true;
             return matchNama && matchDate;
         });
-
         setResults(filtered);
         setLoading(false);
     };
@@ -96,15 +99,12 @@ export default function EditView() {
             setSnackbar({ open: true, message: 'Lengkapi SKU, Harga, dan Qty!', severity: 'warning' });
             return;
         }
-
         const rawHarga = parseInt(editForm.harga.replace(/\./g, ''), 10);
         const rawQty = parseInt(editForm.qty, 10);
-
         const record = results.find(r => r.id === recordId);
         if (!record) return;
 
         let updatedItems;
-
         if (editingItem.itemId === 'new') {
             const newItem = { id: Date.now(), sku: editForm.sku, harga: rawHarga, qty: rawQty };
             updatedItems = [...record.items, newItem];
@@ -131,7 +131,6 @@ export default function EditView() {
         if (!record) return;
 
         const updatedItems = record.items.filter(item => item.id !== itemId);
-
         if (updatedItems.length === 0) {
             await deleteSellout(recordId);
             setSnackbar({ open: true, message: 'Record dihapus karena tidak ada item', severity: 'success' });
@@ -142,9 +141,27 @@ export default function EditView() {
         handleSearch();
     };
 
-    return (
-        <Box sx={{ pb: 8 }}> {/* pb: 8 agar tidak tertutup bottom nav */}
+    // ✅ FUNGSI BARU: Simpan edit info record (Tanggal & Toko)
+    const saveRecordEdit = async (recordId) => {
+        if (!recordEditForm.tanggal || !recordEditForm.namaToko) {
+            setSnackbar({ open: true, message: 'Tanggal dan Nama Toko wajib diisi!', severity: 'warning' });
+            return;
+        }
+        try {
+            await updateSellout(recordId, {
+                tanggal: recordEditForm.tanggal,
+                namaToko: recordEditForm.namaToko.toUpperCase()
+            });
+            setSnackbar({ open: true, message: 'Info record berhasil diupdate!', severity: 'success' });
+            setEditingRecord(null);
+            handleSearch();
+        } catch (error) {
+            setSnackbar({ open: true, message: 'Gagal update info: ' + error.message, severity: 'error' });
+        }
+    };
 
+    return (
+        <Box sx={{ pb: 8 }}>
             {/* ========== FILTER CARD ========== */}
             <Paper elevation={0} sx={{
                 p: { xs: 2, md: 3 }, mb: 3, borderRadius: 4,
@@ -166,7 +183,6 @@ export default function EditView() {
                     </Box>
                 </Box>
                 <Divider sx={{ mb: 2.5 }} />
-
                 <Stack spacing={2.5}>
                     <Box>
                         <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>Nama SPG</Typography>
@@ -187,7 +203,6 @@ export default function EditView() {
                             {namaList.map(n => <MenuItem key={n} value={n} sx={{ fontSize: '0.95rem' }}>{n}</MenuItem>)}
                         </Select>
                     </Box>
-
                     <Box>
                         <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>Tanggal</Typography>
                         <DatePicker
@@ -209,7 +224,6 @@ export default function EditView() {
                             }}
                         />
                     </Box>
-
                     <Button
                         variant="contained"
                         fullWidth
@@ -248,6 +262,7 @@ export default function EditView() {
             {results.map(record => {
                 const grandTotal = record.items.reduce((sum, item) => sum + (item.harga * item.qty), 0);
                 const isAddingNew = editingItem?.recordId === record.id && editingItem?.itemId === 'new';
+                const isEditingRecord = editingRecord === record.id;
 
                 return (
                     <Paper
@@ -268,28 +283,82 @@ export default function EditView() {
                             </Avatar>
                             <Box sx={{ flexGrow: 1 }}>
                                 <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1.05rem', color: '#1e293b', lineHeight: 1.2 }}>{record.nama}</Typography>
-                                <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap' }}>
-                                    <Chip
-                                        icon={<StoreIcon sx={{ fontSize: '16px !important' }} />}
-                                        label={record.namaToko}
-                                        size="small"
-                                        variant="outlined"
-                                        sx={{ height: 24, fontSize: '0.75rem', borderColor: '#cbd5e1', color: '#475569', bgcolor: '#f8fafc' }}
-                                    />
-                                    <Chip
-                                        icon={<CalendarIcon sx={{ fontSize: '16px !important' }} />}
-                                        label={record.tanggal}
-                                        size="small"
-                                        sx={{ height: 24, fontSize: '0.75rem', bgcolor: '#eff6ff', color: '#1e40af', fontWeight: 600 }}
-                                    />
-                                </Stack>
+
+                                {/* ✅ MODE EDIT INFO RECORD */}
+                                {isEditingRecord ? (
+                                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 1.5, alignItems: 'center' }}>
+                                        <DatePicker
+                                            label="Tanggal"
+                                            value={recordEditForm.tanggal ? new Date(recordEditForm.tanggal) : null}
+                                            onChange={(newDate) => setRecordEditForm({ ...recordEditForm, tanggal: formatDateLocal(newDate) })}
+                                            slotProps={{
+                                                textField: {
+                                                    size: 'small',
+                                                    sx: { minWidth: { xs: '100%', sm: 150 } }
+                                                }
+                                            }}
+                                        />
+                                        <TextField
+                                            label="Nama Toko"
+                                            value={recordEditForm.namaToko}
+                                            onChange={(e) => setRecordEditForm({ ...recordEditForm, namaToko: e.target.value.toUpperCase() })}
+                                            size="small"
+                                            sx={{ minWidth: { xs: '100%', sm: 150 } }}
+                                        />
+                                        <Box sx={{ display: 'flex', gap: 1, mt: { xs: 1, sm: 0 } }}>
+                                            <Tooltip title="Simpan Info">
+                                                <IconButton color="success" size="small" onClick={() => saveRecordEdit(record.id)} sx={{ bgcolor: '#f0fdf4', '&:hover': { bgcolor: '#dcfce7' } }}>
+                                                    <SaveIcon />
+                                                </IconButton>
+                                            </Tooltip>
+                                            <Tooltip title="Batal">
+                                                <IconButton color="default" size="small" onClick={() => setEditingRecord(null)} sx={{ bgcolor: '#f1f5f9', '&:hover': { bgcolor: '#e2e8f0' } }}>
+                                                    <CancelIcon />
+                                                </IconButton>
+                                            </Tooltip>
+                                        </Box>
+                                    </Stack>
+                                ) : (
+                                    /* ✅ MODE VIEW INFO RECORD */
+                                    <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                                        <Chip
+                                            icon={<StoreIcon sx={{ fontSize: '16px !important' }} />}
+                                            label={record.namaToko}
+                                            size="small"
+                                            variant="outlined"
+                                            sx={{ height: 26, fontSize: '0.75rem', borderColor: '#cbd5e1', color: '#475569', bgcolor: '#f8fafc' }}
+                                        />
+                                        <Chip
+                                            icon={<CalendarIcon sx={{ fontSize: '16px !important' }} />}
+                                            label={record.tanggal}
+                                            size="small"
+                                            sx={{ height: 26, fontSize: '0.75rem', bgcolor: '#eff6ff', color: '#1e40af', fontWeight: 600 }}
+                                        />
+                                        <Tooltip title="Edit Tanggal & Toko">
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => {
+                                                    setEditingRecord(record.id);
+                                                    setRecordEditForm({ tanggal: record.tanggal, namaToko: record.namaToko });
+                                                }}
+                                                sx={{
+                                                    bgcolor: '#f1f5f9',
+                                                    '&:hover': { bgcolor: '#e2e8f0' },
+                                                    width: 26,
+                                                    height: 26
+                                                }}
+                                            >
+                                                <EditIcon sx={{ fontSize: 16 }} />
+                                            </IconButton>
+                                        </Tooltip>
+                                    </Stack>
+                                )}
                             </Box>
                         </Box>
 
                         <Divider sx={{ mb: 2.5 }} />
 
                         <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3 }}>
-
                             {/* Image Section */}
                             <Box sx={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                 <Box
@@ -525,7 +594,6 @@ export default function EditView() {
                                         Tambah Item SKU (Jika Ada yang Tertinggal)
                                     </Button>
                                 )}
-
                             </Box>
                         </Box>
                     </Paper>
