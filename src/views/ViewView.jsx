@@ -165,32 +165,12 @@ const generateWhatsAppReport = (record, dateStr) => {
     return report;
 };
 
-// ✅ KONFIGURASI PERMIT (Warna & Ikon Disesuaikan)
+// ✅ KONFIGURASI PERMIT (Dengan Meeting)
 const PERMIT_CONFIG = {
-    Sakit: {
-        color: '#ef4444',       // Merah
-        bg: '#fee2e2',          // Merah Muda
-        icon: SakitIcon,
-        label: 'Sakit'
-    },
-    Izin: {
-        color: '#f59e0b',       // Kuning/Amber
-        bg: '#fef3c7',          // Kuning Muda
-        icon: NoteIcon,
-        label: 'Izin'
-    },
-    Off: {
-        color: '#64748b',       // Abu-abu/Slate
-        bg: '#f1f5f9',          // Abu-abu Muda
-        icon: OffIcon,
-        label: 'Off'
-    },
-    Meeting: {
-        color: '#6366f1',       // Indigo/Ungu Kebiruan
-        bg: '#e0e7ff',          // Indigo Muda
-        icon: MeetingIcon,      // Ikon Groups (Orang Banyak)
-        label: 'Meeting'
-    }
+    Sakit: { color: '#ef4444', bg: '#fee2e2', icon: SakitIcon, label: 'Sakit' },
+    Izin: { color: '#f59e0b', bg: '#fef3c7', icon: NoteIcon, label: 'Izin' },
+    Off: { color: '#64748b', bg: '#f1f5f9', icon: OffIcon, label: 'Off' },
+    Meeting: { color: '#6366f1', bg: '#e0e7ff', icon: MeetingIcon, label: 'Meeting' }
 };
 
 export default function ViewView() {
@@ -216,7 +196,6 @@ export default function ViewView() {
     const [deleteDialog, setDeleteDialog] = useState({ open: false, recordId: null, recordInfo: null, isDeleting: false });
     const [showInactiveList, setShowInactiveList] = useState(false);
 
-    // ✅ STATE PERMIT
     const [permitData, setPermitData] = useState([]);
     const [permitDialog, setPermitDialog] = useState({ open: false, dateStr: null });
     const [permitForm, setPermitForm] = useState({ nama: '', jenis: 'Sakit', catatan: '' });
@@ -375,11 +354,16 @@ export default function ViewView() {
 
     const handleCalendarDateClick = (dateStr) => {
         const total = getTotalByDate(dateStr);
-        if (total > 0) {
+        const permits = getPermitsByDate(dateStr);
+        if (total > 0 || permits.length > 0) {
             setSelectedDate(dateStr);
         } else {
             setPermitDialog({ open: true, dateStr });
-            setPermitForm({ nama: '', jenis: 'Sakit', catatan: '' });
+            setPermitForm({ 
+                nama: filterNama || '', 
+                jenis: 'Sakit', 
+                catatan: '' 
+            });
         }
     };
 
@@ -423,14 +407,21 @@ export default function ViewView() {
         }
     };
 
-    // SESUDAH (filter berdasarkan nama SPG yang dipilih)
-const getPermitsByDate = (dateStr) => {
-    return permitData.filter(p => {
-        if (p.tanggal !== dateStr) return false;
-        if (filterNama && p.nama !== filterNama) return false; // ✅ Filter nama
-        return true;
-    });
-};
+    // ✅ FUNGSI DIPERBAIKI: Filter permit berdasarkan filterNama
+    const getPermitsByDate = (dateStr) => {
+        return permitData.filter(p => {
+            if (p.tanggal !== dateStr) return false;
+            if (filterNama && p.nama !== filterNama) return false;
+            return true;
+        });
+    };
+
+    const getFilteredPermitsCount = () => {
+        return permitData.filter(p => {
+            if (filterNama && p.nama !== filterNama) return false;
+            return true;
+        }).length;
+    };
 
     const handleDownloadPivot = async () => {
         if (Object.keys(pivotData).length === 0) { setSnackbar({ open: true, message: 'Tidak ada data', severity: 'warning' }); return; }
@@ -671,8 +662,8 @@ const getPermitsByDate = (dateStr) => {
                 </Box>
             </Paper>
 
-            {/* ===== CARD STATUS SPG ===== */}
-            {isFiltered && namaList.length > 0 && (
+            {/* ✅ PERBAIKAN: Card Status SPG HANYA muncul jika filterNama === '' (Semua Nama SPG) */}
+            {isFiltered && namaList.length > 0 && filterNama === '' && (
                 <Paper elevation={0} sx={{
                     mb: 3, borderRadius: 4, overflow: 'hidden',
                     border: inactiveNamas.length > 0 ? '2px solid #f59e0b' : '2px solid #10b981',
@@ -726,7 +717,7 @@ const getPermitsByDate = (dateStr) => {
             )}
 
             {/* ===== TOGGLE PIVOT / CALENDAR ===== */}
-            {isFiltered && Object.keys(pivotData).length > 0 && (
+            {isFiltered && (Object.keys(pivotData).length > 0 || getFilteredPermitsCount() > 0) && (
                 <Box sx={{ mb: 3, display: 'flex', justifyContent: 'center' }}>
                     <ToggleButtonGroup value={viewMode} exclusive onChange={(e, m) => { if (m) setViewMode(m); }} sx={{ '& .MuiToggleButton-root': { px: 3, py: 1.5, textTransform: 'none', fontWeight: 600, '&.Mui-selected': { bgcolor: '#667eea', color: 'white' } } }}>
                         <ToggleButton value="pivot"><ViewListIcon sx={{ mr: 1 }} /> Pivot</ToggleButton>
@@ -736,7 +727,7 @@ const getPermitsByDate = (dateStr) => {
             )}
 
             {!isFiltered && !loading && (<Paper elevation={0} sx={{ p: 8, textAlign: 'center', borderRadius: 4, border: '2px dashed #e2e8f0', bgcolor: '#f8fafc' }}><FilterIcon sx={{ fontSize: 64, color: '#cbd5e1', mb: 2 }} /><Typography variant="h6" color="#64748b" fontWeight={600}>Belum ada data</Typography><Typography variant="body2" color="#94a3b8">Klik <strong style={{ color: '#667eea' }}>"Terapkan"</strong></Typography></Paper>)}
-            {isFiltered && Object.keys(pivotData).length === 0 && (<Paper elevation={0} sx={{ p: 8, textAlign: 'center', borderRadius: 4, border: '2px dashed #e2e8f0', bgcolor: '#f8fafc' }}><ClearIcon sx={{ fontSize: 64, color: '#cbd5e1', mb: 2 }} /><Typography variant="h6" color="#64748b" fontWeight={600}>Tidak ada data ditemukan</Typography></Paper>)}
+            {isFiltered && Object.keys(pivotData).length === 0 && getFilteredPermitsCount() === 0 && (<Paper elevation={0} sx={{ p: 8, textAlign: 'center', borderRadius: 4, border: '2px dashed #e2e8f0', bgcolor: '#f8fafc' }}><ClearIcon sx={{ fontSize: 64, color: '#cbd5e1', mb: 2 }} /><Typography variant="h6" color="#64748b" fontWeight={600}>Tidak ada data ditemukan</Typography></Paper>)}
 
             {/* ===== PIVOT VIEW ===== */}
             {viewMode === 'pivot' && isFiltered && Object.keys(pivotData).length > 0 && (
@@ -775,14 +766,19 @@ const getPermitsByDate = (dateStr) => {
             )}
 
             {/* ===== CALENDAR VIEW + PERMIT ===== */}
-            {viewMode === 'calendar' && isFiltered && Object.keys(pivotData).length > 0 && (
+            {viewMode === 'calendar' && isFiltered && (Object.keys(pivotData).length > 0 || getFilteredPermitsCount() > 0) && (
                 <Paper elevation={0} sx={{ p: { xs: 1.5, md: 3 }, borderRadius: 4, border: '1px solid rgba(102,126,234,0.06)' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: { xs: 2, md: 2.5 }, flexWrap: 'wrap', gap: 1.5 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 1.5 } }}>
                             <Avatar sx={{ bgcolor: '#667eea', width: { xs: 36, md: 40 }, height: { xs: 36, md: 40 } }}><CalendarIcon sx={{ fontSize: { xs: 18, md: 22 } }} /></Avatar>
                             <Box>
-                                <Typography variant="h6" fontWeight="bold" sx={{ fontSize: { xs: '0.95rem', md: '1.1rem' }, color: '#667eea' }}>Kalender Penjualan</Typography>
-                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: '0.65rem', md: '0.75rem' } }}>Klik tanggal berisi data untuk detail • Klik tanggal kosong untuk input Permit</Typography>
+                                <Typography variant="h6" fontWeight="bold" sx={{ fontSize: { xs: '0.95rem', md: '1.1rem' }, color: '#667eea' }}>
+                                    Kalender Penjualan
+                                    {filterNama && <Chip label={filterNama} size="small" sx={{ ml: 1, bgcolor: '#dbeafe', color: '#1e40af', fontWeight: 'bold', fontSize: '0.7rem', height: 22 }} />}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: '0.65rem', md: '0.75rem' } }}>
+                                    {filterNama ? `Filter aktif: ${filterNama}` : 'Semua SPG'} • Klik tanggal untuk detail/permit
+                                </Typography>
                             </Box>
                         </Box>
                         <Stack direction="row" spacing={0.5} alignItems="center">
@@ -792,7 +788,6 @@ const getPermitsByDate = (dateStr) => {
                         </Stack>
                     </Box>
 
-                    {/* ✅ LEGEND PERMIT */}
                     <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap', p: 1.5, bgcolor: '#f8fafc', borderRadius: 2 }}>
                         <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 600, mr: 1 }}>Keterangan Permit:</Typography>
                         {Object.entries(PERMIT_CONFIG).map(([key, cfg]) => {
@@ -841,14 +836,11 @@ const getPermitsByDate = (dateStr) => {
                                             }}
                                         >
                                             <Typography variant="body2" fontWeight="bold" sx={{ color: hasData ? 'white' : '#475569', fontSize: { xs: '0.7rem', md: '0.9rem' }, lineHeight: 1 }}>{dd.day}</Typography>
-
                                             {hasData && (
                                                 <Typography variant="caption" sx={{ color: 'white', fontSize: { xs: '0.5rem', md: '0.65rem' }, fontWeight: 600, mt: 0.25 }}>
                                                     {total >= 1000000 ? `${(total / 1000000).toFixed(1)}M` : total >= 1000 ? `${(total / 1000).toFixed(0)}K` : formatRupiah(total)}
                                                 </Typography>
                                             )}
-
-                                            {/* ✅ INDICATOR PERMIT DENGAN TEKS JELAS */}
                                             {hasPermit && (
                                                 <Box sx={{
                                                     display: 'flex',
@@ -896,7 +888,6 @@ const getPermitsByDate = (dateStr) => {
                                                     )}
                                                 </Box>
                                             )}
-
                                             {!hasData && !hasPermit && (
                                                 <Typography variant="caption" sx={{ color: '#cbd5e1', fontSize: { xs: '0.45rem', md: '0.55rem' }, mt: 0.25, fontStyle: 'italic' }}>kosong</Typography>
                                             )}
@@ -907,34 +898,39 @@ const getPermitsByDate = (dateStr) => {
                         ))}
                     </Box>
 
-                    {/* ===== DETAIL PANEL ===== */}
                     {selectedDate && (
                         <Box sx={{ mt: 2, p: { xs: 1.5, md: 2.5 }, borderRadius: { xs: 2, md: 3 }, bgcolor: '#eff6ff', border: '2px solid #667eea' }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
                                 <CalendarIcon sx={{ color: '#667eea' }} />
                                 <Typography variant="h6" fontWeight="bold" sx={{ color: '#1e40af', fontSize: { xs: '0.9rem', md: '1.1rem' } }}>Detail: {formatDateIndo(selectedDate)}</Typography>
-                                <Chip label={`Total: Rp ${formatRupiah(getTotalByDate(selectedDate))}`} sx={{ ml: { xs: 0, md: 'auto' }, bgcolor: '#059669', color: 'white', fontWeight: 'bold', fontSize: '0.75rem' }} />
+                                {getTotalByDate(selectedDate) > 0 && (
+                                    <Chip label={`Total: Rp ${formatRupiah(getTotalByDate(selectedDate))}`} sx={{ ml: { xs: 0, md: 'auto' }, bgcolor: '#059669', color: 'white', fontWeight: 'bold', fontSize: '0.75rem' }} />
+                                )}
                             </Box>
-                            <Divider sx={{ mb: 2 }} />
-                            <Stack spacing={1}>
-                                {getDetailByDate(selectedDate).map((detail, idx) => (
-                                    <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2 }, p: { xs: 1, md: 1.5 }, bgcolor: 'white', borderRadius: 2, border: '1px solid #bfdbfe', flexWrap: 'wrap' }}>
-                                        <Avatar sx={{ bgcolor: '#667eea', width: { xs: 32, md: 36 }, height: { xs: 32, md: 36 }, fontSize: '0.85rem' }}>{detail.nama.charAt(0).toUpperCase()}</Avatar>
-                                        <Box sx={{ flex: 1, minWidth: '120px' }}>
-                                            <Typography variant="body2" fontWeight="bold" sx={{ fontSize: { xs: '0.8rem', md: '0.9rem' } }}>{detail.nama}</Typography>
-                                            <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5, flexWrap: 'wrap' }}>
-                                                <Chip icon={<StoreIcon sx={{ fontSize: '12px !important' }} />} label={detail.store} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
-                                                <Chip label={`${detail.itemCount} item • ${detail.qtyCount} pcs`} size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: '#f1f5f9' }} />
-                                            </Box>
-                                        </Box>
-                                        <Typography variant="body1" fontWeight="bold" sx={{ color: '#059669', fontFamily: 'monospace', fontSize: { xs: '0.85rem', md: '1rem' } }}>Rp {formatRupiah(detail.total)}</Typography>
-                                        <Tooltip title="Copy Report WA"><IconButton size="small" onClick={() => handleCopyReport(detail.record)} sx={{ bgcolor: '#eff6ff', '&:hover': { bgcolor: '#dbeafe' } }}><CopyIcon sx={{ fontSize: 18 }} /></IconButton></Tooltip>
-                                        <Tooltip title="Hapus"><IconButton color="error" size="small" onClick={() => handleOpenDeleteDialog(detail.recordId, { nama: detail.nama, store: detail.store, date: selectedDate, total: detail.total })} sx={{ bgcolor: '#fef2f2', '&:hover': { bgcolor: '#fee2e2' } }}><DeleteIcon sx={{ fontSize: 18 }} /></IconButton></Tooltip>
-                                    </Box>
-                                ))}
-                            </Stack>
 
-                            {/* ✅ SECTION PERMIT DI DETAIL PANEL */}
+                            {getDetailByDate(selectedDate).length > 0 && (
+                                <>
+                                    <Divider sx={{ mb: 2 }} />
+                                    <Stack spacing={1}>
+                                        {getDetailByDate(selectedDate).map((detail, idx) => (
+                                            <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2 }, p: { xs: 1, md: 1.5 }, bgcolor: 'white', borderRadius: 2, border: '1px solid #bfdbfe', flexWrap: 'wrap' }}>
+                                                <Avatar sx={{ bgcolor: '#667eea', width: { xs: 32, md: 36 }, height: { xs: 32, md: 36 }, fontSize: '0.85rem' }}>{detail.nama.charAt(0).toUpperCase()}</Avatar>
+                                                <Box sx={{ flex: 1, minWidth: '120px' }}>
+                                                    <Typography variant="body2" fontWeight="bold" sx={{ fontSize: { xs: '0.8rem', md: '0.9rem' } }}>{detail.nama}</Typography>
+                                                    <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5, flexWrap: 'wrap' }}>
+                                                        <Chip icon={<StoreIcon sx={{ fontSize: '12px !important' }} />} label={detail.store} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+                                                        <Chip label={`${detail.itemCount} item • ${detail.qtyCount} pcs`} size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: '#f1f5f9' }} />
+                                                    </Box>
+                                                </Box>
+                                                <Typography variant="body1" fontWeight="bold" sx={{ color: '#059669', fontFamily: 'monospace', fontSize: { xs: '0.85rem', md: '1rem' } }}>Rp {formatRupiah(detail.total)}</Typography>
+                                                <Tooltip title="Copy Report WA"><IconButton size="small" onClick={() => handleCopyReport(detail.record)} sx={{ bgcolor: '#eff6ff', '&:hover': { bgcolor: '#dbeafe' } }}><CopyIcon sx={{ fontSize: 18 }} /></IconButton></Tooltip>
+                                                <Tooltip title="Hapus"><IconButton color="error" size="small" onClick={() => handleOpenDeleteDialog(detail.recordId, { nama: detail.nama, store: detail.store, date: selectedDate, total: detail.total })} sx={{ bgcolor: '#fef2f2', '&:hover': { bgcolor: '#fee2e2' } }}><DeleteIcon sx={{ fontSize: 18 }} /></IconButton></Tooltip>
+                                            </Box>
+                                        ))}
+                                    </Stack>
+                                </>
+                            )}
+
                             {getPermitsByDate(selectedDate).length > 0 && (
                                 <Box sx={{ mt: 2 }}>
                                     <Divider sx={{ mb: 2 }} />
@@ -974,6 +970,12 @@ const getPermitsByDate = (dateStr) => {
                                     </Stack>
                                 </Box>
                             )}
+
+                            {getDetailByDate(selectedDate).length === 0 && getPermitsByDate(selectedDate).length === 0 && (
+                                <Box sx={{ textAlign: 'center', py: 3 }}>
+                                    <Typography variant="body2" color="text.secondary">Tidak ada data atau permit untuk tanggal ini</Typography>
+                                </Box>
+                            )}
                         </Box>
                     )}
                 </Paper>
@@ -992,7 +994,6 @@ const getPermitsByDate = (dateStr) => {
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                         Tanggal: <strong style={{ color: '#1e293b' }}>{permitDialog.dateStr ? formatDateIndo(permitDialog.dateStr) : '-'}</strong>
                     </Typography>
-
                     <Stack spacing={2.5}>
                         <Box>
                             <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
@@ -1021,12 +1022,11 @@ const getPermitsByDate = (dateStr) => {
                                 noOptionsText="Tidak ada nama ditemukan"
                             />
                         </Box>
-
                         <Box>
                             <Typography variant="caption" sx={{ color: 'text.secondary', mb: 1, display: 'block', ml: 0.5, fontWeight: 600 }}>
                                 Jenis Permit <span style={{ color: '#ef4444' }}>*</span>
                             </Typography>
-                            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
+                            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1 }}>
                                 {Object.entries(PERMIT_CONFIG).map(([key, cfg]) => {
                                     const Icon = cfg.icon;
                                     const isSelected = permitForm.jenis === key;
@@ -1054,7 +1054,6 @@ const getPermitsByDate = (dateStr) => {
                                 })}
                             </Box>
                         </Box>
-
                         <Box>
                             <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
                                 Catatan (opsional)
