@@ -15,7 +15,11 @@ import {
     CloudUpload as UploadIcon, ShoppingCart as CartIcon
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { uploadImage } from '../utils/cloudinary';
+
+// ✅ IMPORT BARU: Watermark, GPS & Lokasi
+import { uploadImage, applyWatermark } from '../utils/cloudinary';
+import { getCurrentLocation, reverseGeocode, formatDateTime } from '../utils/location';
+
 import { getNamaList, getSkuList, addSellout } from '../utils/storage';
 
 const formatDateLocal = (date) => {
@@ -43,16 +47,12 @@ export default function InputView() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [showQueue, setShowQueue] = useState(false);
-
     const [errors, setErrors] = useState({ nama: false, namaToko: false, foto: false, queue: false });
-
     const [namaList, setNamaList] = useState([]);
     const [skuList, setSkuList] = useState([]);
-
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
     const [dialogDelete, setDialogDelete] = useState({ open: false, itemId: null, sku: '' });
     const [dialogSubmit, setDialogSubmit] = useState({ open: false });
-
     const queueRef = useRef(null);
 
     useEffect(() => {
@@ -91,14 +91,12 @@ export default function InputView() {
             setSnackbar({ open: true, message: 'Qty harus lebih dari 0!', severity: 'warning' });
             return;
         }
-
         const newQueue = [...queue, { id: Date.now(), sku: sku.label || sku, harga: rawHarga, qty: rawQty }];
         setQueue(newQueue);
         setSku(null); setHarga(''); setQty('');
         setShowQueue(true);
         setErrors(prev => ({ ...prev, queue: false }));
         setSnackbar({ open: true, message: 'Item ditambahkan ke queue', severity: 'success' });
-
         setTimeout(() => {
             queueRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 100);
@@ -124,7 +122,6 @@ export default function InputView() {
             queue: queue.length === 0
         };
         setErrors(newErrors);
-
         if (newErrors.nama || newErrors.namaToko || newErrors.foto || newErrors.queue) {
             setSnackbar({ open: true, message: 'Mohon lengkapi semua data yang wajib diisi!', severity: 'error' });
             return;
@@ -132,18 +129,73 @@ export default function InputView() {
         setDialogSubmit({ open: true });
     };
 
+    // ✅ FUNGSI SUBMIT DENGAN WATERMARK & GPS
     const handleConfirmSubmit = async () => {
         setDialogSubmit({ open: false });
         setIsSubmitting(true);
-        setUploadProgress(10);
+        setUploadProgress(5);
 
         try {
-            setUploadProgress(40);
-            const fotoUrl = await uploadImage(foto);
+            // ✅ STEP 1: Ambil lokasi GPS (5% → 20%)
+            setUploadProgress(10);
+            let locationData = { lat: '', lng: '', alamat: '', kota: '' };
+
+            try {
+                const coords = await getCurrentLocation();
+                locationData.lat = coords.lat.toFixed(7);
+                locationData.lng = coords.lng.toFixed(7);
+
+                setUploadProgress(15);
+
+                // Reverse geocode untuk dapat alamat
+                const geoResult = await reverseGeocode(coords.lat, coords.lng);
+                locationData.alamat = geoResult.alamat;
+                locationData.kota = geoResult.kota;
+
+                setUploadProgress(20);
+            } catch (gpsError) {
+                console.warn('️ GPS gagal:', gpsError.message);
+                setSnackbar({
+                    open: true,
+                    message: '⚠️ GPS tidak tersedia, watermark tanpa lokasi',
+                    severity: 'warning'
+                });
+            }
+
+            // ✅ STEP 2: Apply Watermark (20% → 50%)
+            setUploadProgress(25);
+            let fileToUpload = foto;
+
+            try {
+                const watermarkData = {
+                    nama: nama?.label || nama || 'SPG',
+                    toko: namaToko.toUpperCase(),
+                    alamat: locationData.alamat || 'Alamat tidak tersedia',
+                    kota: locationData.kota || '',
+                    tanggal: formatDateTime(new Date()),
+                    lat: locationData.lat,
+                    lng: locationData.lng
+                };
+
+                fileToUpload = await applyWatermark(foto, watermarkData);
+                setUploadProgress(50);
+                console.log('✅ Watermark berhasil ditambahkan');
+            } catch (wmError) {
+                console.warn('️ Watermark gagal:', wmError);
+                fileToUpload = foto;
+                setUploadProgress(50);
+            }
+
+            // ✅ STEP 3: Upload ke Cloudinary (50% → 90%)
+            const fotoUrl = await uploadImage(fileToUpload, (progress) => {
+                setUploadProgress(50 + Math.floor(progress * 0.4));
+            });
+
             if (!fotoUrl) throw new Error('Upload foto gagal');
 
-            setUploadProgress(80);
+            setUploadProgress(92);
 
+            // ✅ STEP 4: Simpan ke Firebase (92% → 100%)
             const newData = {
                 tanggal: formatDateLocal(date),
                 nama: nama.label || nama,
@@ -151,36 +203,41 @@ export default function InputView() {
                 foto: fotoUrl,
                 items: queue,
                 grandTotal: queue.reduce((sum, item) => sum + (item.harga * item.qty), 0),
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
+                // ✅ METADATA LOKASI
+                lokasi: {
+                    lat: locationData.lat,
+                    lng: locationData.lng,
+                    alamat: locationData.alamat,
+                    kota: locationData.kota
+                }
             };
 
             await addSellout(newData);
             setUploadProgress(100);
+            setSnackbar({ open: true, message: '✅ Data berhasil disimpan dengan watermark!', severity: 'success' });
 
-            setSnackbar({ open: true, message: 'Data berhasil disimpan!', severity: 'success' });
-
+            // Reset form
             setNama(null); setNamaToko(''); setFoto(null); setFotoPreview('');
             setQueue([]); setShowQueue(false); setDate(new Date());
             setErrors({ nama: false, namaToko: false, foto: false, queue: false });
         } catch (error) {
-            setSnackbar({ open: true, message: 'Gagal menyimpan: ' + error.message, severity: 'error' });
+            setSnackbar({ open: true, message: '❌ Gagal menyimpan: ' + error.message, severity: 'error' });
         } finally {
             setTimeout(() => {
                 setIsSubmitting(false);
                 setUploadProgress(0);
-            }, 500);
+            }, 800);
         }
     };
 
     const grandTotal = queue.reduce((sum, item) => sum + (item.harga * item.qty), 0);
     const totalItems = queue.reduce((sum, item) => sum + item.qty, 0);
-
     const namaOptions = namaList.map(n => ({ label: n, value: n }));
     const skuOptions = skuList.map(s => ({ label: s, value: s }));
 
     return (
         <Box sx={{ pb: 8 }}>
-
             {/* ========== STEP 1: INFORMASI DASAR ========== */}
             <Paper elevation={0} sx={{
                 p: { xs: 2, md: 3 }, mb: 2, borderRadius: 4,
@@ -203,7 +260,6 @@ export default function InputView() {
                     </Box>
                 </Box>
                 <Divider sx={{ mb: 2.5 }} />
-
                 <Stack spacing={2.5}>
                     <Box>
                         <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
@@ -227,7 +283,6 @@ export default function InputView() {
                             }}
                         />
                     </Box>
-
                     <Box>
                         <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
                             Nama SPG <span style={{ color: '#ef4444' }}>*</span>
@@ -255,7 +310,6 @@ export default function InputView() {
                             noOptionsText="Tidak ada nama ditemukan"
                         />
                     </Box>
-
                     <Box>
                         <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
                             Nama Toko <span style={{ color: '#ef4444' }}>*</span>
@@ -296,15 +350,14 @@ export default function InputView() {
                     </Avatar>
                     <Box>
                         <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1.05rem', color: '#1e40af', lineHeight: 1.2 }}>
-                            Step 2: Upload Foto
+                            Step 2: Upload Foto & Item
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                            Foto Activity Wajib di Grid
+                            Foto akan otomatis diberi watermark lokasi & waktu
                         </Typography>
                     </Box>
                 </Box>
                 <Divider sx={{ mb: 2.5 }} />
-
                 <Button
                     variant="outlined"
                     component="label"
@@ -329,13 +382,11 @@ export default function InputView() {
                     </Box>
                     <input type="file" hidden accept="image/*" onChange={handleFotoChange} />
                 </Button>
-
                 {fotoPreview && (
                     <Fade in timeout={500}>
                         <Box component="img" src={fotoPreview} sx={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 3, mb: 2.5, border: '2px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} />
                     </Fade>
                 )}
-
                 <Stack spacing={2.5} sx={{ mb: 2 }}>
                     <Box>
                         <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>Pilih SKU</Typography>
@@ -351,7 +402,6 @@ export default function InputView() {
                             noOptionsText="Tidak ada SKU ditemukan"
                         />
                     </Box>
-
                     <Box sx={{ display: 'flex', gap: 2 }}>
                         <Box sx={{ flex: 1 }}>
                             <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>Harga Satuan</Typography>
@@ -370,7 +420,6 @@ export default function InputView() {
                             />
                         </Box>
                     </Box>
-
                     <Button
                         variant="contained" fullWidth onClick={handleAddToQueue} startIcon={<AddIcon />}
                         sx={{
@@ -383,7 +432,6 @@ export default function InputView() {
                         Tambah ke Daftar Penjualan
                     </Button>
                 </Stack>
-
                 <Box ref={queueRef}>
                     {!showQueue && queue.length === 0 ? (
                         <Box sx={{ textAlign: 'center', py: 4, bgcolor: '#f8fafc', borderRadius: 3, border: '1px dashed #cbd5e1' }}>
@@ -434,7 +482,6 @@ export default function InputView() {
                                     </TableBody>
                                 </Table>
                             </TableContainer>
-
                             <Paper elevation={0} sx={{
                                 p: 2.5, borderRadius: 3,
                                 background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
@@ -475,7 +522,7 @@ export default function InputView() {
                 sx={{
                     py: 2.2, borderRadius: 4, fontSize: '1.1rem', fontWeight: 'bold',
                     boxShadow: isSubmitting ? 'none' : '0 8px 24px rgba(5, 150, 105, 0.3)',
-                    textTransform: 'none', 
+                    textTransform: 'none',
                     background: isSubmitting ? '#cbd5e1' : 'linear-gradient(135deg, #059669 0%, #047857 100%)',
                     transition: 'all 0.3s ease',
                     '&:hover': {
@@ -496,7 +543,6 @@ export default function InputView() {
                     </Box>
                 )}
             </Button>
-
             {isSubmitting && <LinearProgress variant="determinate" value={uploadProgress} sx={{ mt: 1.5, borderRadius: 2, height: 6, bgcolor: '#d1fae5', '& .MuiLinearProgress-bar': { bgcolor: '#059669' } }} />}
 
             {/* ========== DIALOG DELETE ========== */}
@@ -519,7 +565,7 @@ export default function InputView() {
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}><CalendarIcon sx={{ fontSize: 20, color: '#1e40af' }} /><Typography variant="body2"><strong>Tanggal:</strong> {formatDateLocal(date)}</Typography></Box>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}><PersonIcon sx={{ fontSize: 20, color: '#1e40af' }} /><Typography variant="body2"><strong>SPG:</strong> {nama?.label || nama}</Typography></Box>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}><StoreIcon sx={{ fontSize: 20, color: '#1e40af' }} /><Typography variant="body2"><strong>Toko:</strong> {namaToko.toUpperCase()}</Typography></Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}><ImageIcon sx={{ fontSize: 20, color: '#1e40af' }} /><Typography variant="body2"><strong>Foto:</strong> {foto ? 'Sudah Terupload' : 'Belum ada'}</Typography></Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}><ImageIcon sx={{ fontSize: 20, color: '#1e40af' }} /><Typography variant="body2"><strong>Foto:</strong> {foto ? 'Sudah Terupload (Akan di-watermark)' : 'Belum ada'}</Typography></Box>
                             <Divider sx={{ my: 0.5 }} />
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pt: 1 }}>
                                 <Typography variant="body2" fontWeight="bold" color="#334155">Total ({queue.length} item)</Typography>

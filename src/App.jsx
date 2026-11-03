@@ -9,6 +9,7 @@ import InputView from './views/InputView';
 import ViewView from './views/ViewView';
 import EditView from './views/EditView';
 import SettingsView from './views/SettingsView';
+import AnalyticsView from './views/AnalyticsView'; // ✅ TAMBAHKAN INI
 
 function App() {
     return (
@@ -23,6 +24,7 @@ function App() {
                                 <Route path="/input" element={<InputView />} />
                                 <Route path="/view" element={<ViewView />} />
                                 <Route path="/edit" element={<EditView />} />
+                                <Route path="/analytics" element={<AnalyticsView />} />
                                 <Route path="/settings" element={<SettingsView />} />
                             </Routes>
                         </Layout>

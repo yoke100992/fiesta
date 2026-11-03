@@ -5,6 +5,7 @@ import ViewListIcon from '@mui/icons-material/ViewList';
 import EditIcon from '@mui/icons-material/Edit';
 import SettingsIcon from '@mui/icons-material/Settings';
 import DashboardIcon from '@mui/icons-material/Dashboard';
+import AnalyticsIcon from '@mui/icons-material/Analytics';
 
 export default function Layout({ children }) {
     const location = useLocation();
@@ -13,6 +14,7 @@ export default function Layout({ children }) {
     const menuItems = [
         { path: '/input', label: 'Input', icon: <InputIcon /> },
         { path: '/view', label: 'View', icon: <ViewListIcon /> },
+        { path: '/analytics', label: 'Analytics', icon: <AnalyticsIcon /> },
         { path: '/edit', label: 'Edit', icon: <EditIcon /> },
         { path: '/settings', label: 'Settings', icon: <SettingsIcon /> },
     ];
@@ -23,7 +25,7 @@ export default function Layout({ children }) {
     };
 
     return (
-        <Box sx={{ pb: 7 }}>
+        <Box sx={{ pb: 7, minHeight: '100vh', bgcolor: '#f8fafc' }}>
             {/* Modern Header */}
             <AppBar
                 position="sticky"
@@ -41,7 +43,7 @@ export default function Layout({ children }) {
                             fontWeight: 700,
                             fontSize: '1.2rem',
                             letterSpacing: '0.5px',
-                            color:'white'
+                            color: 'white'
                         }}
                     >
                         SPG Sales Report
@@ -49,8 +51,17 @@ export default function Layout({ children }) {
                 </Toolbar>
             </AppBar>
 
-            {/* Content */}
-            <Container maxWidth="md" sx={{ py: 2, px: { xs: 1.5, sm: 2 } }}>
+            {/* ✅ PERBAIKAN: Container lebih lebar (maxWidth=false + custom max) */}
+            <Container
+                maxWidth={false}
+                disableGutters
+                sx={{
+                    py: { xs: 2, md: 3 },
+                    px: { xs: 1, sm: 2, md: 3, lg: 4 },
+                    maxWidth: '1400px !important',
+                    mx: 'auto'
+                }}
+            >
                 {children}
             </Container>
 
