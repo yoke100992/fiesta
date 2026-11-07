@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
     Box, Paper, Select, MenuItem, Button, Table, TableBody, TableCell,
     TableContainer, TableHead, TableRow, Typography, Stack,
@@ -35,13 +35,17 @@ const formatDateLocal = (date) => {
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
 };
+
 const formatRupiah = (number) => new Intl.NumberFormat('id-ID').format(number);
+
 const formatDateIndo = (dateStr) => {
     if (!dateStr) return '';
-    const [year, month, day] = dateStr.split('-');
+    const d = parseAnyDate(dateStr);
+    if (isNaN(d.getTime())) return String(dateStr);
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-    return `${day} ${months[parseInt(month) - 1]} ${year}`;
+    return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 };
+
 const isValidDate = (dateStr) => {
     if (dateStr === undefined || dateStr === null) return false;
     const str = String(dateStr).trim().toLowerCase();
@@ -52,6 +56,7 @@ const isValidDate = (dateStr) => {
         return true;
     } catch (e) { return false; }
 };
+
 const parseAnyDate = (dateStr) => {
     if (!dateStr) return new Date(0);
     const str = String(dateStr).trim();
@@ -68,6 +73,7 @@ const parseAnyDate = (dateStr) => {
     const fallback = new Date(str);
     return isNaN(fallback.getTime()) ? new Date(0) : fallback;
 };
+
 const compressImage = (arrayBuffer, quality = 0.9) => {
     return new Promise((resolve) => {
         try {
@@ -107,9 +113,16 @@ const compressImage = (arrayBuffer, quality = 0.9) => {
         } catch (err) { resolve(null); }
     });
 };
+
 const imageCache = new Map();
+const MAX_CACHE_SIZE = 50;
+
 const fetchImageWithCache = async (url) => {
     if (imageCache.has(url)) return imageCache.get(url);
+    if (imageCache.size >= MAX_CACHE_SIZE) {
+        const firstKey = imageCache.keys().next().value;
+        imageCache.delete(firstKey);
+    }
     try {
         const response = await fetch(url, { mode: 'cors' });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -118,6 +131,7 @@ const fetchImageWithCache = async (url) => {
         return arrayBuffer;
     } catch (err) { return null; }
 };
+
 const getImageExtension = (url) => {
     if (!url) return 'jpeg';
     const u = url.toLowerCase();
@@ -125,6 +139,7 @@ const getImageExtension = (url) => {
     if (u.includes('.gif')) return 'gif';
     return 'jpeg';
 };
+
 const generateCalendarGrid = (year, month) => {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
@@ -145,6 +160,7 @@ const generateCalendarGrid = (year, month) => {
     }
     return grid;
 };
+
 const generateWhatsAppReport = (record, dateStr) => {
     const items = record.items || [];
     let report = `*Report Sell out tanggal ${formatDateIndo(dateStr)}*\n`;
@@ -161,10 +177,10 @@ const generateWhatsAppReport = (record, dateStr) => {
 };
 
 const PERMIT_CONFIG = {
-    Sakit: { color: '#ef4444', bg: '#fee2e2', icon: SakitIcon, label: 'Sakit' },
-    Izin: { color: '#f59e0b', bg: '#fef3c7', icon: NoteIcon, label: 'Izin' },
-    Off: { color: '#64748b', bg: '#f1f5f9', icon: OffIcon, label: 'Off' },
-    Meeting: { color: '#6366f1', bg: '#e0e7ff', icon: MeetingIcon, label: 'Meeting' }
+    Sakit: { color: '#ef4444', bg: '#fee2e2', icon: SakitIcon, label: 'Sakit', excelColor: 'FFEF4444', excelBg: 'FFFEE2E2' },
+    Izin: { color: '#f59e0b', bg: '#fef3c7', icon: NoteIcon, label: 'Izin', excelColor: 'FFF59E0B', excelBg: 'FFFEF3C7' },
+    Off: { color: '#64748b', bg: '#f1f5f9', icon: OffIcon, label: 'Off', excelColor: 'FF64748B', excelBg: 'FFF1F5F9' },
+    Meeting: { color: '#6366f1', bg: '#e0e7ff', icon: MeetingIcon, label: 'Meeting', excelColor: 'FF6366F1', excelBg: 'FFE0E7FF' }
 };
 
 export default function ViewView() {
@@ -194,7 +210,6 @@ export default function ViewView() {
     const [permitForm, setPermitForm] = useState({ nama: '', jenis: 'Sakit', catatan: '' });
     const [permitSubmitting, setPermitSubmitting] = useState(false);
 
-    // State untuk filter calendar tambahan & capture
     const [calendarFilterNama, setCalendarFilterNama] = useState('');
     const [isCapturing, setIsCapturing] = useState(false);
     const pivotCaptureRef = useRef(null);
@@ -212,8 +227,29 @@ export default function ViewView() {
         loadInitial();
     }, []);
 
-    const inactiveNamas = isNamaFiltered ? [] : namaList.filter(n => !pivotData[n]);
-    const activeNamas = Object.keys(pivotData);
+    // ✅ LOGIKA BARU: Target Nama dinamis (custom filter atau semua)
+    const targetNamas = useMemo(() => {
+        return filterNama.length > 0 ? filterNama : namaList;
+    }, [filterNama, namaList]);
+
+    // ✅ SPG Tidak Aktif = targetNamas yang tidak ada di pivotData
+    const inactiveNamas = useMemo(() => {
+        return targetNamas.filter(n => !pivotData[n]);
+    }, [targetNamas, pivotData]);
+
+    const activeNamas = useMemo(() => {
+        return Object.keys(pivotData);
+    }, [pivotData]);
+
+    // ✅ Lookup Permit O(1) untuk Pivot Table
+    const permitsLookup = useMemo(() => {
+        const map = {};
+        permitData.forEach(p => {
+            if (!map[p.tanggal]) map[p.tanggal] = {};
+            map[p.tanggal][p.nama] = p;
+        });
+        return map;
+    }, [permitData]);
 
     const handleApplyFilter = async () => {
         setLoading(true);
@@ -438,16 +474,15 @@ export default function ViewView() {
     };
 
     const getPermitsByDate = (dateStr) => {
-    return permitData.filter(p => {
-        if (p.tanggal !== dateStr) return false;
-        // Jika filter awal > 1 SPG, gunakan calendarFilterNama untuk mempersempit
-        const activeFilter = filterNama.length > 1
-            ? (calendarFilterNama ? [calendarFilterNama] : filterNama)
-            : filterNama;
-        if (activeFilter.length > 0 && !activeFilter.includes(p.nama)) return false;
-        return true;
-    });
-};
+        return permitData.filter(p => {
+            if (p.tanggal !== dateStr) return false;
+            const activeFilter = filterNama.length > 1
+                ? (calendarFilterNama ? [calendarFilterNama] : filterNama)
+                : filterNama;
+            if (activeFilter.length > 0 && !activeFilter.includes(p.nama)) return false;
+            return true;
+        });
+    };
 
     const getTotalByDate = (dateStr) => {
         let t = 0;
@@ -609,11 +644,13 @@ export default function ViewView() {
     };
 
     const handleDownloadRaw = async () => {
-        if (Object.keys(pivotData).length === 0) { setSnackbar({ open: true, message: 'Tidak ada data', severity: 'warning' }); return; }
+        if (Object.keys(pivotData).length === 0 && permitData.length === 0) { setSnackbar({ open: true, message: 'Tidak ada data', severity: 'warning' }); return; }
         setIsDownloading(true);
         try {
             const workbook = new ExcelJS.Workbook();
             const ws = workbook.addWorksheet('Raw Data Sell Out');
+
+            // ===== BAGIAN 1: DATA SELLOUT =====
             const allRecords = [];
             Object.values(pivotData).forEach(nd => nd.records.forEach(r => allRecords.push(r)));
             allRecords.sort((a, b) => {
@@ -699,12 +736,14 @@ export default function ViewView() {
                 });
                 rn++;
             }
+
+            // Grand Total Sellout
             const trc = includePhotos ? 9 : 8;
             const tr = ws.addRow([]);
             tr.height = 28;
             ws.mergeCells(cer, 1, cer, trc - 1);
             const tc = ws.getCell(cer, 1);
-            tc.value = 'GRAND TOTAL';
+            tc.value = 'GRAND TOTAL SELLOUT';
             tc.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
             tc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
             tc.alignment = { vertical: 'middle', horizontal: 'right' };
@@ -716,6 +755,90 @@ export default function ViewView() {
             gc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
             gc.alignment = { vertical: 'middle', horizontal: 'right' };
             gc.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+            cer++;
+
+            // ===== BAGIAN 2: DATA PERMIT (BARU) =====
+            const startTs = startDate ? new Date(startDate).setHours(0, 0, 0, 0) : 0;
+            const endTs = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Infinity;
+            const filteredPermits = permitData.filter(p => {
+                if (!p.tanggal || !isValidDate(p.tanggal)) return false;
+                const pTs = parseAnyDate(p.tanggal).getTime();
+                if (pTs === 0 || isNaN(pTs)) return false;
+                const matchNama = isNamaFiltered ? filterNama.includes(p.nama) : true;
+                return pTs >= startTs && pTs <= endTs && matchNama;
+            }).sort((a, b) => parseAnyDate(a.tanggal) - parseAnyDate(b.tanggal));
+
+            if (filteredPermits.length > 0) {
+                // Bar kosong pemisah
+                ws.addRow([]);
+                cer++;
+
+                // Header DATA PERMIT
+                const permitHeaderRow = ws.addRow(['DATA PERMIT']);
+                permitHeaderRow.height = 30;
+                ws.mergeCells(cer, 1, cer, trc);
+                const phc = ws.getCell(cer, 1);
+                phc.value = 'DATA PERMIT';
+                phc.font = { bold: true, size: 13, color: { argb: 'FFFFFFFF' } };
+                phc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD97706' } };
+                phc.alignment = { vertical: 'middle', horizontal: 'center' };
+                phc.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+                cer++;
+
+                // Sub Header
+                const subHeader = ws.addRow(['No', 'Tanggal', 'Nama SPG', 'Jenis Permit', 'Catatan']);
+                subHeader.height = 25;
+                subHeader.font = { bold: true, size: 10, color: { argb: 'FF92400E' } };
+                subHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFED7AA' } };
+                subHeader.alignment = { vertical: 'middle', horizontal: 'center' };
+                subHeader.eachCell(c => {
+                    c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+                });
+                cer++;
+
+                // Data Permit
+                filteredPermits.forEach((p, idx) => {
+                    const cfg = PERMIT_CONFIG[p.jenis] || PERMIT_CONFIG.Off;
+                    const rowData = [
+                        idx + 1,
+                        formatDateIndo(p.tanggal),
+                        p.nama,
+                        p.jenis,
+                        p.catatan || '-'
+                    ];
+                    const row = ws.addRow(rowData);
+                    row.height = 22;
+                    row.alignment = { vertical: 'middle', wrapText: true };
+                    row.eachCell((cell, cn) => {
+                        cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+                        if (cn === 1) cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                        else cell.alignment = { vertical: 'middle', horizontal: 'left' };
+                        // Warna sesuai jenis permit
+                        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cfg.excelBg } };
+                        if (cn === 4) {
+                            cell.font = { bold: true, color: { argb: cfg.excelColor } };
+                            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                        }
+                    });
+                    cer++;
+                });
+
+                // Total Permit
+                const totalPermitRow = ws.addRow([]);
+                totalPermitRow.height = 26;
+                ws.mergeCells(cer, 1, cer, 3);
+                const tprc = ws.getCell(cer, 1);
+                tprc.value = `TOTAL PERMIT: ${filteredPermits.length} data`;
+                tprc.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+                tprc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD97706' } };
+                tprc.alignment = { vertical: 'middle', horizontal: 'right' };
+                tprc.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+                ws.mergeCells(cer, 4, cer, trc);
+                const tprv = ws.getCell(cer, 4);
+                tprv.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+                tprv.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD97706' } };
+            }
+
             ws.views = [{ state: 'frozen', ySplit: 1 }];
             const buffer = await workbook.xlsx.writeBuffer();
             saveAs(
@@ -757,7 +880,6 @@ export default function ViewView() {
                 <Divider sx={{ mb: 2.5 }} />
                 <Stack spacing={2.5}>
                     <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-                        {/* MULTI-SELECT NAMA SPG */}
                         <Box sx={{ flex: 1 }}>
                             <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
                                 Nama SPG <span style={{ color: '#94a3b8', fontWeight: 400 }}>(Bisa pilih beberapa)</span>
@@ -844,7 +966,6 @@ export default function ViewView() {
                     </Stack>
                 </Stack>
 
-                {/* Chip filter aktif */}
                 {isNamaFiltered && (
                     <Box sx={{ mt: 2, p: 1.5, borderRadius: 2, bgcolor: '#eff6ff', border: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                         <Typography variant="caption" sx={{ color: '#1e40af', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -868,20 +989,20 @@ export default function ViewView() {
                         <FormLabel sx={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569', mb: 1 }}>Format Laporan</FormLabel>
                         <RadioGroup row value={reportFormat} onChange={(e) => setReportFormat(e.target.value)} sx={{ gap: 2 }}>
                             <FormControlLabel value="pivot" control={<Radio sx={{ color: '#667eea', '&.Mui-checked': { color: '#667eea' } }} />} label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}><ViewListIcon sx={{ fontSize: 18, color: reportFormat === 'pivot' ? '#667eea' : '#94a3b8' }} /><Typography variant="body2" fontWeight={reportFormat === 'pivot' ? 700 : 500} color={reportFormat === 'pivot' ? '#1e293b' : '#64748b'}>Pivot</Typography></Box>} sx={{ flex: 1, p: 1.5, borderRadius: 2, border: `2px solid ${reportFormat === 'pivot' ? '#667eea' : '#e2e8f0'}`, bgcolor: reportFormat === 'pivot' ? '#eff6ff' : 'white', ml: 0, mr: 0 }} />
-                            <FormControlLabel value="raw" control={<Radio sx={{ color: '#667eea', '&.Mui-checked': { color: '#667eea' } }} />} label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}><TableIcon sx={{ fontSize: 18, color: reportFormat === 'raw' ? '#667eea' : '#94a3b8' }} /><Typography variant="body2" fontWeight={reportFormat === 'raw' ? 700 : 500} color={reportFormat === 'raw' ? '#1e293b' : '#64748b'}>Raw Data</Typography></Box>} sx={{ flex: 1, p: 1.5, borderRadius: 2, border: `2px solid ${reportFormat === 'raw' ? '#667eea' : '#e2e8f0'}`, bgcolor: reportFormat === 'raw' ? '#eff6ff' : 'white', ml: 0, mr: 0 }} />
+                            <FormControlLabel value="raw" control={<Radio sx={{ color: '#667eea', '&.Mui-checked': { color: '#667eea' } }} />} label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}><TableIcon sx={{ fontSize: 18, color: reportFormat === 'raw' ? '#667eea' : '#94a3b8' }} /><Typography variant="body2" fontWeight={reportFormat === 'raw' ? 700 : 500} color={reportFormat === 'raw' ? '#1e293b' : '#64748b'}>Raw Data (+Permit)</Typography></Box>} sx={{ flex: 1, p: 1.5, borderRadius: 2, border: `2px solid ${reportFormat === 'raw' ? '#667eea' : '#e2e8f0'}`, bgcolor: reportFormat === 'raw' ? '#eff6ff' : 'white', ml: 0, mr: 0 }} />
                         </RadioGroup>
                     </FormControl>
                     <FormControlLabel control={<Switch checked={includePhotos} onChange={(e) => setIncludePhotos(e.target.checked)} sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#667eea' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#667eea' } }} />} label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>{includePhotos ? <PhotoIcon sx={{ fontSize: 20, color: '#667eea' }} /> : <TableIcon sx={{ fontSize: 20, color: '#64748b' }} />}<Box><Typography variant="body2" fontWeight={600} color={includePhotos ? '#667eea' : '#64748b'}>{includePhotos ? 'Sertakan Foto (90%)' : 'Tanpa Foto'}</Typography></Box></Box>} sx={{ p: 1.5, borderRadius: 2, border: '1px solid #e2e8f0', bgcolor: 'white', ml: 0, mr: 0, alignItems: 'flex-start' }} />
                 </Box>
                 <Box sx={{ mt: 3, display: 'flex', justifyContent: { xs: 'center', md: 'flex-end' } }}>
-                    <Button variant="contained" onClick={handleDownload} startIcon={<DownloadIcon />} disabled={Object.keys(pivotData).length === 0} sx={{ py: 1.5, px: 3, borderRadius: 3, fontWeight: 'bold', textTransform: 'none', background: '#3874BC', '&:disabled': { background: '#cbd5e1', color: '#94a3b8' } }}>
+                    <Button variant="contained" onClick={handleDownload} startIcon={<DownloadIcon />} disabled={Object.keys(pivotData).length === 0 && permitData.length === 0} sx={{ py: 1.5, px: 3, borderRadius: 3, fontWeight: 'bold', textTransform: 'none', background: '#3874BC', '&:disabled': { background: '#cbd5e1', color: '#94a3b8' } }}>
                         Download {reportFormat === 'pivot' ? 'Pivot' : 'Raw Data'} {includePhotos ? '(Dengan Foto)' : '(Tanpa Foto)'}
                     </Button>
                 </Box>
             </Paper>
 
-            {/* Card Status SPG */}
-            {isFiltered && namaList.length > 0 && !isNamaFiltered && (
+            {/* ✅ Card Status SPG - Muncul juga saat custom filter */}
+            {isFiltered && targetNamas.length > 0 && (
                 <Paper elevation={0} sx={{
                     mb: 3, borderRadius: 4, overflow: 'hidden',
                     border: inactiveNamas.length > 0 ? '2px solid #f59e0b' : '2px solid #10b981',
@@ -901,11 +1022,11 @@ export default function ViewView() {
                             </Typography>
                             <Typography variant="caption" sx={{ fontSize: { xs: '0.7rem', md: '0.8rem' }, color: inactiveNamas.length > 0 ? '#b45309' : '#047857', display: 'block', mt: 0.3 }}>
                                 {inactiveNamas.length > 0
-                                    ? `dari ${namaList.length} total SPG • ${activeNamas.length} SPG aktif`
+                                    ? `dari ${targetNamas.length} SPG yang dipilih/ditampilkan • ${activeNamas.length} SPG memiliki data`
                                     : `${activeNamas.length} SPG sudah mengerjakan`}
                             </Typography>
                         </Box>
-                        <Chip label={`${activeNamas.length}/${namaList.length} Aktif`} size="small" sx={{ bgcolor: inactiveNamas.length > 0 ? '#f59e0b' : '#10b981', color: 'white', fontWeight: 'bold', fontSize: { xs: '0.7rem', md: '0.8rem' }, height: { xs: 26, md: 30 }, display: { xs: 'none', sm: 'flex' } }} />
+                        <Chip label={`${activeNamas.length}/${targetNamas.length} Aktif`} size="small" sx={{ bgcolor: inactiveNamas.length > 0 ? '#f59e0b' : '#10b981', color: 'white', fontWeight: 'bold', fontSize: { xs: '0.7rem', md: '0.8rem' }, height: { xs: 26, md: 30 }, display: { xs: 'none', sm: 'flex' } }} />
                         {inactiveNamas.length > 0 && <IconButton size="small" sx={{ color: '#92400e', transition: 'transform 0.3s', transform: showInactiveList ? 'rotate(180deg)' : 'rotate(0deg)' }}><ExpandMoreIcon /></IconButton>}
                     </Box>
                     <Collapse in={showInactiveList && inactiveNamas.length > 0}>
@@ -962,14 +1083,14 @@ export default function ViewView() {
                 </Paper>
             )}
 
-            {/* ===== PIVOT VIEW ===== */}
-            {viewMode === 'pivot' && isFiltered && Object.keys(pivotData).length > 0 && (
+            {/* ===== PIVOT VIEW - DENGAN PERMIT ===== */}
+            {viewMode === 'pivot' && isFiltered && (Object.keys(pivotData).length > 0 || permitData.length > 0) && (
                 <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, borderRadius: 4, border: '1px solid rgba(102,126,234,0.06)' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5, flexWrap: 'wrap' }}>
                         <Avatar sx={{ bgcolor: '#667eea', width: 40, height: 40 }}><ReceiptIcon sx={{ fontSize: 22 }} /></Avatar>
                         <Box sx={{ flex: 1, minWidth: 0 }}>
                             <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1.1rem', color: '#667eea' }}>Pivot Penjualan Harian</Typography>
-                            <Typography variant="caption" color="text.secondary">Total Rupiah per SPG per Tanggal</Typography>
+                            <Typography variant="caption" color="text.secondary">Total Rupiah per SPG per Tanggal (termasuk Permit)</Typography>
                         </Box>
                         <Tooltip title="Capture & Simpan sebagai PNG">
                             <IconButton
@@ -996,9 +1117,8 @@ export default function ViewView() {
                                 <TableHead>
                                     <TableRow>
                                         <TableCell sx={{ position: 'sticky', left: 0, zIndex: 3, background: '#3874BC', color: 'white', fontWeight: 'bold', minWidth: 160 }}>Nama SPG</TableCell>
-{/* ✅ KOLOM BARU: HK (Hari Kerja) */}
-<TableCell align="center" sx={{ background: '#7c3aed', color: 'white', fontWeight: 'bold', minWidth: 80, fontSize: '0.8rem' }}>HK</TableCell>
-{allDates.map(d => (<TableCell key={d} align="center" sx={{ background: '#3879BC', color: 'white', fontWeight: 'bold', minWidth: 110, fontSize: '0.75rem' }}>{formatDateIndo(d)}</TableCell>))}
+                                        <TableCell align="center" sx={{ background: '#7c3aed', color: 'white', fontWeight: 'bold', minWidth: 80, fontSize: '0.8rem' }}>HK</TableCell>
+                                        {allDates.map(d => (<TableCell key={d} align="center" sx={{ background: '#3879BC', color: 'white', fontWeight: 'bold', minWidth: 110, fontSize: '0.75rem' }}>{formatDateIndo(d)}</TableCell>))}
                                         <TableCell align="right" sx={{ background: '#059669', color: 'white', fontWeight: 'bold', minWidth: 130 }}>Total SPG</TableCell>
                                     </TableRow>
                                 </TableHead>
@@ -1006,23 +1126,115 @@ export default function ViewView() {
                                     {Object.keys(pivotData).sort().map((nama, ri) => (
                                         <TableRow key={nama} hover>
                                             <TableCell sx={{ position: 'sticky', left: 0, zIndex: 1, bgcolor: ri % 2 === 0 ? '#fff' : '#f8fafc', fontWeight: 'bold', fontSize: '0.85rem', borderRight: '1px solid #e2e8f0' }}>
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <Avatar sx={{ bgcolor: '#eff6ff', color: '#667eea', width: 32, height: 32, fontSize: '0.8rem' }}>{nama.charAt(0).toUpperCase()}</Avatar>
-        {nama}
-    </Box>
-</TableCell>
-{/* ✅ CELL BARU: Menampilkan Jumlah HK SPG */}
-<TableCell align="center" sx={{ bgcolor: '#f5f3ff', fontWeight: 'bold', color: '#7c3aed', fontFamily: 'monospace', fontSize: '0.95rem', borderRight: '1px solid #e2e8f0' }}>
-    {Object.keys(pivotData[nama].totalByDate).length}
-</TableCell>
-{allDates.map(d => { const t = pivotData[nama].totalByDate[d] || 0; return (<TableCell key={d} align="right" sx={{ fontFamily: 'monospace', fontSize: '0.85rem', color: t > 0 ? '#1e293b' : '#cbd5e1', fontWeight: t > 0 ? 600 : 400 }}>{t > 0 ? formatRupiah(t) : '-'}</TableCell>); })}
-                                            <TableCell align="right" sx={{ bgcolor: '#f0fdf4', fontWeight: 'bold', color: '#059669', fontFamily: 'monospace', fontSize: '0.9rem', borderLeft: '2px solid #059669' }}>{formatRupiah(getGrandTotal(nama))}</TableCell>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                                    <Avatar sx={{ bgcolor: '#eff6ff', color: '#667eea', width: 32, height: 32, fontSize: '0.8rem' }}>{nama.charAt(0).toUpperCase()}</Avatar>
+                                                    {nama}
+                                                </Box>
+                                            </TableCell>
+
+                                            <TableCell align="center" sx={{ bgcolor: '#f5f3ff', fontWeight: 'bold', color: '#7c3aed', fontFamily: 'monospace', fontSize: '0.95rem', borderRight: '1px solid #e2e8f0' }}>
+                                                {Object.keys(pivotData[nama].totalByDate).length}
+                                            </TableCell>
+
+                                            {/* ✅ CELL DENGAN LOGIKA PERMIT */}
+                                            {allDates.map(d => {
+                                                const t = pivotData[nama].totalByDate[d] || 0;
+                                                const permit = permitsLookup[d]?.[nama];
+
+                                                if (permit) {
+                                                    const cfg = PERMIT_CONFIG[permit.jenis] || PERMIT_CONFIG.Off;
+                                                    const Icon = cfg.icon;
+                                                    return (
+                                                        <TableCell key={d} align="center" sx={{ bgcolor: cfg.bg, border: `1px solid ${cfg.color}30` }}>
+                                                            <Tooltip title={`${permit.jenis}${permit.catatan ? `: ${permit.catatan}` : ''}`}>
+                                                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
+                                                                    <Icon sx={{ fontSize: 18, color: cfg.color }} />
+                                                                    <Typography variant="caption" sx={{ fontSize: '0.65rem', fontWeight: 'bold', color: cfg.color, lineHeight: 1 }}>
+                                                                        {cfg.label}
+                                                                    </Typography>
+                                                                </Box>
+                                                            </Tooltip>
+                                                        </TableCell>
+                                                    );
+                                                }
+
+                                                return (
+                                                    <TableCell key={d} align="right" sx={{
+                                                        fontFamily: 'monospace',
+                                                        fontSize: '0.85rem',
+                                                        color: t > 0 ? '#1e293b' : '#cbd5e1',
+                                                        fontWeight: t > 0 ? 600 : 400
+                                                    }}>
+                                                        {t > 0 ? formatRupiah(t) : '-'}
+                                                    </TableCell>
+                                                );
+                                            })}
+
+                                            <TableCell align="right" sx={{ bgcolor: '#f0fdf4', fontWeight: 'bold', color: '#059669', fontFamily: 'monospace', fontSize: '0.9rem', borderLeft: '2px solid #059669' }}>
+                                                {formatRupiah(getGrandTotal(nama))}
+                                            </TableCell>
                                         </TableRow>
                                     ))}
+
+                                    {/* Tampilkan juga baris untuk SPG yang hanya punya permit tapi tidak ada di pivotData */}
+                                    {inactiveNamas.filter(n => permitData.some(p => p.nama === n && allDates.includes(p.tanggal))).map((nama, ri) => {
+                                        const realIdx = Object.keys(pivotData).length + ri;
+                                        return (
+                                            <TableRow key={`permit-only-${nama}`} sx={{ bgcolor: '#fffbeb' }}>
+                                                <TableCell sx={{ position: 'sticky', left: 0, zIndex: 1, bgcolor: '#fffbeb', fontWeight: 'bold', fontSize: '0.85rem', borderRight: '1px solid #e2e8f0' }}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                                        <Avatar sx={{ bgcolor: '#fef3c7', color: '#92400e', width: 32, height: 32, fontSize: '0.8rem' }}>{nama.charAt(0).toUpperCase()}</Avatar>
+                                                        <Box>
+                                                            <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '0.85rem' }}>{nama}</Typography>
+                                                            <Typography variant="caption" sx={{ color: '#b45309', fontSize: '0.65rem' }}>Hanya Permit</Typography>
+                                                        </Box>
+                                                    </Box>
+                                                </TableCell>
+                                                <TableCell align="center" sx={{ bgcolor: '#fffbeb', color: '#92400e', fontWeight: 'bold', fontFamily: 'monospace' }}>0</TableCell>
+                                                {allDates.map(d => {
+                                                    const permit = permitsLookup[d]?.[nama];
+                                                    if (permit) {
+                                                        const cfg = PERMIT_CONFIG[permit.jenis] || PERMIT_CONFIG.Off;
+                                                        const Icon = cfg.icon;
+                                                        return (
+                                                            <TableCell key={d} align="center" sx={{ bgcolor: cfg.bg, border: `1px solid ${cfg.color}30` }}>
+                                                                <Tooltip title={`${permit.jenis}${permit.catatan ? `: ${permit.catatan}` : ''}`}>
+                                                                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
+                                                                        <Icon sx={{ fontSize: 18, color: cfg.color }} />
+                                                                        <Typography variant="caption" sx={{ fontSize: '0.65rem', fontWeight: 'bold', color: cfg.color, lineHeight: 1 }}>
+                                                                            {cfg.label}
+                                                                        </Typography>
+                                                                    </Box>
+                                                                </Tooltip>
+                                                            </TableCell>
+                                                        );
+                                                    }
+                                                    return (
+                                                        <TableCell key={d} align="right" sx={{ fontFamily: 'monospace', fontSize: '0.85rem', color: '#cbd5e1' }}>-</TableCell>
+                                                    );
+                                                })}
+                                                <TableCell align="right" sx={{ bgcolor: '#fffbeb', fontWeight: 'bold', color: '#92400e', fontFamily: 'monospace', borderLeft: '2px solid #f59e0b' }}>
+                                                    Rp 0
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
+
                                     <TableRow sx={{ bgcolor: '#1e3a8a' }}>
                                         <TableCell sx={{ position: 'sticky', left: 0, zIndex: 1, bgcolor: '#1e3a8a', fontWeight: 'bold', color: 'white', borderRight: '2px solid #1e40af' }}>GRAND TOTAL</TableCell>
-                                        {allDates.map(d => { let dt = 0; Object.values(pivotData).forEach(nd => { dt += nd.totalByDate[d] || 0; }); return (<TableCell key={d} align="right" sx={{ fontFamily: 'monospace', fontSize: '0.85rem', color: 'white', fontWeight: 'bold' }}>{dt > 0 ? formatRupiah(dt) : '-'}</TableCell>); })}
-                                        <TableCell align="right" sx={{ bgcolor: '#059669', fontWeight: 'bold', color: 'white', fontFamily: 'monospace', fontSize: '1rem', borderLeft: '2px solid #047857' }}>{formatRupiah(getTotalAll())}</TableCell>
+                                        <TableCell align="center" sx={{ bgcolor: '#1e3a8a', color: 'white', fontWeight: 'bold' }}>-</TableCell>
+                                        {allDates.map(d => {
+                                            let dt = 0;
+                                            Object.values(pivotData).forEach(nd => { dt += nd.totalByDate[d] || 0; });
+                                            return (
+                                                <TableCell key={d} align="right" sx={{ fontFamily: 'monospace', fontSize: '0.85rem', color: 'white', fontWeight: 'bold' }}>
+                                                    {dt > 0 ? formatRupiah(dt) : '-'}
+                                                </TableCell>
+                                            );
+                                        })}
+                                        <TableCell align="right" sx={{ bgcolor: '#059669', fontWeight: 'bold', color: 'white', fontFamily: 'monospace', fontSize: '1rem', borderLeft: '2px solid #047857' }}>
+                                            {formatRupiah(getTotalAll())}
+                                        </TableCell>
                                     </TableRow>
                                 </TableBody>
                             </Table>
@@ -1065,13 +1277,12 @@ export default function ViewView() {
                         </Tooltip>
                     </Box>
 
-                    {/* FILTER NAMA SPG TAMBAHAN (muncul jika filter awal > 1 SPG) */}
-{filterNama.length > 1 && namaList.length > 0 && (
+                    {filterNama.length > 1 && namaList.length > 0 && (
                         <Box sx={{ mb: 2.5, p: 2, borderRadius: 3, bgcolor: '#f0f9ff', border: '1px dashed #7dd3fc', display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
                             <SearchIcon sx={{ color: '#0284c7', fontSize: 20 }} />
                             <Typography variant="caption" sx={{ color: '#0c4a6e', fontWeight: 700, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-    Filter Calendar ({filterNama.length} SPG dipilih):
-</Typography>
+                                Filter Calendar ({filterNama.length} SPG dipilih):
+                            </Typography>
                             <Autocomplete
                                 options={namaList}
                                 value={calendarFilterNama || null}
