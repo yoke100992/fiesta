@@ -20,10 +20,11 @@ import {
     EventBusy as PermitIcon, BeachAccess as OffIcon, LocalHospital as SakitIcon,
     NoteAdd as NoteIcon, Groups as MeetingIcon,
     Today as TodayIcon,
-    CameraAlt as CameraIcon, Check as CheckIcon, Search as SearchIcon
+    CameraAlt as CameraIcon, Check as CheckIcon, Search as SearchIcon,
+    LocationOn as LocationIcon, Leaderboard as TeamIcon, Storefront as ChannelIcon
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { getSelloutData, getSelloutDataByDateRange, getNamaList, deleteSellout, getPermitData, addPermit, deletePermit } from '../utils/storage';
+import { getSelloutData, getSelloutDataByDateRange, getNamaList, getNamaDetailList, deleteSellout, getPermitData, addPermit, deletePermit } from '../utils/storage';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import html2canvas from 'html2canvas';
@@ -35,9 +36,7 @@ const formatDateLocal = (date) => {
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
 };
-
 const formatRupiah = (number) => new Intl.NumberFormat('id-ID').format(number);
-
 const formatDateIndo = (dateStr) => {
     if (!dateStr) return '';
     const d = parseAnyDate(dateStr);
@@ -45,7 +44,6 @@ const formatDateIndo = (dateStr) => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
     return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 };
-
 const isValidDate = (dateStr) => {
     if (dateStr === undefined || dateStr === null) return false;
     const str = String(dateStr).trim().toLowerCase();
@@ -56,7 +54,6 @@ const isValidDate = (dateStr) => {
         return true;
     } catch (e) { return false; }
 };
-
 const parseAnyDate = (dateStr) => {
     if (!dateStr) return new Date(0);
     const str = String(dateStr).trim();
@@ -73,7 +70,6 @@ const parseAnyDate = (dateStr) => {
     const fallback = new Date(str);
     return isNaN(fallback.getTime()) ? new Date(0) : fallback;
 };
-
 const compressImage = (arrayBuffer, quality = 0.9) => {
     return new Promise((resolve) => {
         try {
@@ -113,10 +109,8 @@ const compressImage = (arrayBuffer, quality = 0.9) => {
         } catch (err) { resolve(null); }
     });
 };
-
 const imageCache = new Map();
 const MAX_CACHE_SIZE = 50;
-
 const fetchImageWithCache = async (url) => {
     if (imageCache.has(url)) return imageCache.get(url);
     if (imageCache.size >= MAX_CACHE_SIZE) {
@@ -131,7 +125,6 @@ const fetchImageWithCache = async (url) => {
         return arrayBuffer;
     } catch (err) { return null; }
 };
-
 const getImageExtension = (url) => {
     if (!url) return 'jpeg';
     const u = url.toLowerCase();
@@ -139,7 +132,6 @@ const getImageExtension = (url) => {
     if (u.includes('.gif')) return 'gif';
     return 'jpeg';
 };
-
 const generateCalendarGrid = (year, month) => {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
@@ -160,7 +152,6 @@ const generateCalendarGrid = (year, month) => {
     }
     return grid;
 };
-
 const generateWhatsAppReport = (record, dateStr) => {
     const items = record.items || [];
     let report = `*Report Sell out tanggal ${formatDateIndo(dateStr)}*\n`;
@@ -175,12 +166,20 @@ const generateWhatsAppReport = (record, dateStr) => {
     report += `Issue/kendala : ........`;
     return report;
 };
-
 const PERMIT_CONFIG = {
     Sakit: { color: '#ef4444', bg: '#fee2e2', icon: SakitIcon, label: 'Sakit', excelColor: 'FFEF4444', excelBg: 'FFFEE2E2' },
     Izin: { color: '#f59e0b', bg: '#fef3c7', icon: NoteIcon, label: 'Izin', excelColor: 'FFF59E0B', excelBg: 'FFFEF3C7' },
     Off: { color: '#64748b', bg: '#f1f5f9', icon: OffIcon, label: 'Off', excelColor: 'FF64748B', excelBg: 'FFF1F5F9' },
     Meeting: { color: '#6366f1', bg: '#e0e7ff', icon: MeetingIcon, label: 'Meeting', excelColor: 'FF6366F1', excelBg: 'FFE0E7FF' }
+};
+
+// ✅ KONFIGURASI CHANNEL
+const CHANNEL_OPTIONS = [
+    { value: 'GT', label: 'GT (General Trade)', color: '#059669', bg: '#ecfdf5' },
+    { value: 'MT', label: 'MT (Modern Trade)', color: '#7c3aed', bg: '#f5f3ff' }
+];
+const getChannelConfig = (channel) => {
+    return CHANNEL_OPTIONS.find(c => c.value === channel) || { value: channel || '-', label: channel || '-', color: '#64748b', bg: '#f1f5f9' };
 };
 
 export default function ViewView() {
@@ -189,6 +188,7 @@ export default function ViewView() {
     const [endDate, setEndDate] = useState(null);
     const [selloutData, setSelloutData] = useState([]);
     const [namaList, setNamaList] = useState([]);
+    const [namaDetailList, setNamaDetailList] = useState([]); // ✅ Data lengkap SPG
     const [loading, setLoading] = useState(false);
     const [pivotData, setPivotData] = useState({});
     const [allDates, setAllDates] = useState([]);
@@ -210,6 +210,11 @@ export default function ViewView() {
     const [permitForm, setPermitForm] = useState({ nama: '', jenis: 'Sakit', catatan: '' });
     const [permitSubmitting, setPermitSubmitting] = useState(false);
 
+    // ✅ FILTER BARU: Teamleader, Area, Channel
+    const [filterTeamleader, setFilterTeamleader] = useState([]);
+    const [filterArea, setFilterArea] = useState([]);
+    const [filterChannel, setFilterChannel] = useState([]);
+
     const [calendarFilterNama, setCalendarFilterNama] = useState('');
     const [isCapturing, setIsCapturing] = useState(false);
     const pivotCaptureRef = useRef(null);
@@ -217,22 +222,58 @@ export default function ViewView() {
 
     const isNamaFiltered = filterNama.length > 0;
 
+    // ✅ Load data awal termasuk namaDetailList
     useEffect(() => {
         const loadInitial = async () => {
-            const nama = await getNamaList();
-            const permits = await getPermitData();
+            const [nama, namaDetails, permits] = await Promise.all([
+                getNamaList(),
+                getNamaDetailList(),
+                getPermitData()
+            ]);
             setNamaList(nama);
+            setNamaDetailList(namaDetails);
             setPermitData(permits);
         };
         loadInitial();
     }, []);
 
-    // ✅ LOGIKA BARU: Target Nama dinamis (custom filter atau semua)
-    const targetNamas = useMemo(() => {
-        return filterNama.length > 0 ? filterNama : namaList;
-    }, [filterNama, namaList]);
+    // ✅ Extract unique values untuk dropdown filter
+    const uniqueTeamleaders = useMemo(() => {
+        const set = new Set();
+        namaDetailList.forEach(n => { if (n.teamleader && n.teamleader.trim()) set.add(n.teamleader.trim()); });
+        return Array.from(set).sort();
+    }, [namaDetailList]);
 
-    // ✅ SPG Tidak Aktif = targetNamas yang tidak ada di pivotData
+    const uniqueAreas = useMemo(() => {
+        const set = new Set();
+        namaDetailList.forEach(n => { if (n.area && n.area.trim()) set.add(n.area.trim()); });
+        return Array.from(set).sort();
+    }, [namaDetailList]);
+
+    // ✅ Helper: Dapatkan list nama yang match dengan filter Teamleader/Area/Channel
+    const getFilteredNamaByInfo = useMemo(() => {
+        return namaDetailList.filter(n => {
+            const matchTL = filterTeamleader.length === 0 || filterTeamleader.includes(n.teamleader || '');
+            const matchArea = filterArea.length === 0 || filterArea.includes(n.area || '');
+            const matchChannel = filterChannel.length === 0 || filterChannel.includes(n.channel || '');
+            return matchTL && matchArea && matchChannel;
+        }).map(n => n.nama);
+    }, [namaDetailList, filterTeamleader, filterArea, filterChannel]);
+
+    // ✅ Nama yang akan digunakan sebagai basis pivot (irisan dari filterNama & getFilteredNamaByInfo)
+    const effectiveNamaFilter = useMemo(() => {
+        if (isNamaFiltered) {
+            // Jika user pilih nama spesifik, gunakan irisan
+            return filterNama.filter(n => getFilteredNamaByInfo.includes(n));
+        }
+        return getFilteredNamaByInfo;
+    }, [filterNama, isNamaFiltered, getFilteredNamaByInfo]);
+
+    // ✅ Target nama untuk perhitungan inactive
+    const targetNamas = useMemo(() => {
+        return effectiveNamaFilter;
+    }, [effectiveNamaFilter]);
+
     const inactiveNamas = useMemo(() => {
         return targetNamas.filter(n => !pivotData[n]);
     }, [targetNamas, pivotData]);
@@ -241,7 +282,6 @@ export default function ViewView() {
         return Object.keys(pivotData);
     }, [pivotData]);
 
-    // ✅ Lookup Permit O(1) untuk Pivot Table
     const permitsLookup = useMemo(() => {
         const map = {};
         permitData.forEach(p => {
@@ -275,6 +315,7 @@ export default function ViewView() {
             const startTs = startDate ? new Date(startDate).setHours(0, 0, 0, 0) : 0;
             const endTs = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Infinity;
 
+            // ✅ Filter data berdasarkan nama yang match dengan semua filter
             const filteredData = data.filter(d => {
                 if (d.tanggal === undefined || d.tanggal === null) return false;
                 const tanggalStr = String(d.tanggal).trim().toLowerCase();
@@ -282,7 +323,8 @@ export default function ViewView() {
                 if (!isValidDate(d.tanggal)) return false;
                 const dTs = parseAnyDate(d.tanggal).getTime();
                 if (dTs === 0 || isNaN(dTs)) return false;
-                const matchNama = isNamaFiltered ? filterNama.includes(d.nama) : true;
+                // ✅ Gunakan effectiveNamaFilter sebagai basis
+                const matchNama = effectiveNamaFilter.includes(d.nama);
                 return dTs >= startTs && dTs <= endTs && matchNama;
             });
 
@@ -328,6 +370,10 @@ export default function ViewView() {
         setSelectedDate(null);
         setShowInactiveList(false);
         setCalendarFilterNama('');
+        // ✅ Reset filter baru
+        setFilterTeamleader([]);
+        setFilterArea([]);
+        setFilterChannel([]);
     };
 
     const getGrandTotal = (nama) => {
@@ -356,7 +402,7 @@ export default function ViewView() {
                 if (!d.tanggal || !isValidDate(d.tanggal)) return false;
                 const dTs = parseAnyDate(d.tanggal).getTime();
                 if (dTs === 0 || isNaN(dTs)) return false;
-                return dTs >= startTs && dTs <= endTs && (!isNamaFiltered || filterNama.includes(d.nama));
+                return dTs >= startTs && dTs <= endTs && effectiveNamaFilter.includes(d.nama);
             });
 
             const pivot = {};
@@ -525,7 +571,6 @@ export default function ViewView() {
             const captureBtns = ref.current.querySelectorAll('.capture-btn');
             captureBtns.forEach(btn => btn.style.display = 'none');
             await new Promise(resolve => setTimeout(resolve, 100));
-
             const canvas = await html2canvas(ref.current, {
                 backgroundColor: '#f8fafc',
                 scale: 2,
@@ -535,13 +580,10 @@ export default function ViewView() {
                 scrollX: 0,
                 scrollY: -window.scrollY
             });
-
             captureBtns.forEach(btn => btn.style.display = '');
-
             const imageBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 1.0));
             const filename = `${type}_view_${formatDateLocal(startDate || new Date())}_to_${formatDateLocal(endDate || new Date())}.png`;
             saveAs(imageBlob, filename);
-
             setSnackbar({ open: true, message: `✅ Screenshot ${type} berhasil disimpan!`, severity: 'success' });
         } catch (error) {
             console.error('Capture error:', error);
@@ -649,8 +691,6 @@ export default function ViewView() {
         try {
             const workbook = new ExcelJS.Workbook();
             const ws = workbook.addWorksheet('Raw Data Sell Out');
-
-            // ===== BAGIAN 1: DATA SELLOUT =====
             const allRecords = [];
             Object.values(pivotData).forEach(nd => nd.records.forEach(r => allRecords.push(r)));
             allRecords.sort((a, b) => {
@@ -736,8 +776,6 @@ export default function ViewView() {
                 });
                 rn++;
             }
-
-            // Grand Total Sellout
             const trc = includePhotos ? 9 : 8;
             const tr = ws.addRow([]);
             tr.height = 28;
@@ -757,23 +795,19 @@ export default function ViewView() {
             gc.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
             cer++;
 
-            // ===== BAGIAN 2: DATA PERMIT (BARU) =====
             const startTs = startDate ? new Date(startDate).setHours(0, 0, 0, 0) : 0;
             const endTs = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Infinity;
             const filteredPermits = permitData.filter(p => {
                 if (!p.tanggal || !isValidDate(p.tanggal)) return false;
                 const pTs = parseAnyDate(p.tanggal).getTime();
                 if (pTs === 0 || isNaN(pTs)) return false;
-                const matchNama = isNamaFiltered ? filterNama.includes(p.nama) : true;
+                const matchNama = effectiveNamaFilter.includes(p.nama);
                 return pTs >= startTs && pTs <= endTs && matchNama;
             }).sort((a, b) => parseAnyDate(a.tanggal) - parseAnyDate(b.tanggal));
 
             if (filteredPermits.length > 0) {
-                // Bar kosong pemisah
                 ws.addRow([]);
                 cer++;
-
-                // Header DATA PERMIT
                 const permitHeaderRow = ws.addRow(['DATA PERMIT']);
                 permitHeaderRow.height = 30;
                 ws.mergeCells(cer, 1, cer, trc);
@@ -784,8 +818,6 @@ export default function ViewView() {
                 phc.alignment = { vertical: 'middle', horizontal: 'center' };
                 phc.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
                 cer++;
-
-                // Sub Header
                 const subHeader = ws.addRow(['No', 'Tanggal', 'Nama SPG', 'Jenis Permit', 'Catatan']);
                 subHeader.height = 25;
                 subHeader.font = { bold: true, size: 10, color: { argb: 'FF92400E' } };
@@ -795,17 +827,9 @@ export default function ViewView() {
                     c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
                 });
                 cer++;
-
-                // Data Permit
                 filteredPermits.forEach((p, idx) => {
                     const cfg = PERMIT_CONFIG[p.jenis] || PERMIT_CONFIG.Off;
-                    const rowData = [
-                        idx + 1,
-                        formatDateIndo(p.tanggal),
-                        p.nama,
-                        p.jenis,
-                        p.catatan || '-'
-                    ];
+                    const rowData = [idx + 1, formatDateIndo(p.tanggal), p.nama, p.jenis, p.catatan || '-'];
                     const row = ws.addRow(rowData);
                     row.height = 22;
                     row.alignment = { vertical: 'middle', wrapText: true };
@@ -813,7 +837,6 @@ export default function ViewView() {
                         cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
                         if (cn === 1) cell.alignment = { vertical: 'middle', horizontal: 'center' };
                         else cell.alignment = { vertical: 'middle', horizontal: 'left' };
-                        // Warna sesuai jenis permit
                         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cfg.excelBg } };
                         if (cn === 4) {
                             cell.font = { bold: true, color: { argb: cfg.excelColor } };
@@ -822,8 +845,6 @@ export default function ViewView() {
                     });
                     cer++;
                 });
-
-                // Total Permit
                 const totalPermitRow = ws.addRow([]);
                 totalPermitRow.height = 26;
                 ws.mergeCells(cer, 1, cer, 3);
@@ -838,7 +859,6 @@ export default function ViewView() {
                 tprv.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
                 tprv.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD97706' } };
             }
-
             ws.views = [{ state: 'frozen', ySplit: 1 }];
             const buffer = await workbook.xlsx.writeBuffer();
             saveAs(
@@ -866,19 +886,30 @@ export default function ViewView() {
     const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
     const daysOfWeek = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
 
+    // ✅ Helper untuk menghitung jumlah filter aktif
+    const totalActiveFilters = filterNama.length + filterTeamleader.length + filterArea.length + filterChannel.length + (startDate ? 1 : 0) + (endDate ? 1 : 0);
+
     return (
         <Box sx={{ pb: 4, bgcolor: '#f8fafc', minHeight: '100vh' }}>
             {/* ===== FILTER CARD ===== */}
             <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, mb: 3, borderRadius: 4, border: '1px solid rgba(102, 126, 234, 0.08)', background: 'white', boxShadow: '0 2px 12px rgba(102, 126, 234, 0.04)' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
                     <Avatar sx={{ bgcolor: '#667eea', width: 40, height: 40, boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)' }}><FilterIcon sx={{ fontSize: 22 }} /></Avatar>
-                    <Box>
+                    <Box sx={{ flex: 1 }}>
                         <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1.1rem', color: '#667eea', lineHeight: 1.2 }}>Filter Laporan</Typography>
                         <Typography variant="caption" color="text.secondary">Pilih kriteria, lalu klik "Terapkan"</Typography>
                     </Box>
+                    {totalActiveFilters > 0 && (
+                        <Chip
+                            label={`${totalActiveFilters} filter aktif`}
+                            size="small"
+                            sx={{ bgcolor: '#667eea', color: 'white', fontWeight: 'bold', fontSize: '0.75rem' }}
+                        />
+                    )}
                 </Box>
                 <Divider sx={{ mb: 2.5 }} />
                 <Stack spacing={2.5}>
+                    {/* Row 1: Nama SPG */}
                     <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
                         <Box sx={{ flex: 1 }}>
                             <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
@@ -910,9 +941,7 @@ export default function ViewView() {
                                         placeholder={filterNama.length === 0 ? "Semua Nama SPG" : `${filterNama.length} SPG dipilih`}
                                         sx={{
                                             '& .MuiOutlinedInput-root': {
-                                                borderRadius: 3,
-                                                backgroundColor: 'white',
-                                                fontSize: '0.95rem',
+                                                borderRadius: 3, backgroundColor: 'white', fontSize: '0.95rem',
                                                 '& fieldset': { borderColor: '#e2e8f0' },
                                                 '&:hover fieldset': { borderColor: '#667eea' },
                                                 '&.Mui-focused fieldset': { borderColor: '#667eea', borderWidth: 2 }
@@ -931,30 +960,188 @@ export default function ViewView() {
                                 )}
                                 renderTags={(tagValue, getTagProps) =>
                                     tagValue.map((option, index) => (
-                                        <Chip
-                                            {...getTagProps({ index })}
-                                            key={option}
-                                            label={option}
-                                            size="small"
-                                            sx={{
-                                                bgcolor: '#eff6ff',
-                                                color: '#1e40af',
-                                                fontWeight: 600,
-                                                fontSize: '0.75rem',
-                                                height: 24,
-                                                '& .MuiChip-deleteIcon': { fontSize: 14 }
-                                            }}
-                                        />
+                                        <Chip {...getTagProps({ index })} key={option} label={option} size="small"
+                                            sx={{ bgcolor: '#eff6ff', color: '#1e40af', fontWeight: 600, fontSize: '0.75rem', height: 24, '& .MuiChip-deleteIcon': { fontSize: 14 } }} />
                                     ))
                                 }
                             />
                         </Box>
+                    </Stack>
+
+                    {/* ✅ Row 2: Teamleader, Area, Channel */}
+                    <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                        {/* Teamleader */}
+                        <Box sx={{ flex: 1 }}>
+                            <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
+                                Teamleader <span style={{ color: '#94a3b8', fontWeight: 400 }}>(Kosong = Semua)</span>
+                            </Typography>
+                            <Autocomplete
+                                multiple
+                                options={uniqueTeamleaders}
+                                value={filterTeamleader}
+                                onChange={(e, newValue) => setFilterTeamleader(newValue)}
+                                limitTags={1}
+                                disableCloseOnSelect
+                                renderOption={(props, option, { selected }) => (
+                                    <li {...props}>
+                                        <Checkbox checked={selected} sx={{ mr: 1 }} size="small" />
+                                        <ListItemText primary={option} />
+                                    </li>
+                                )}
+                                renderInput={(params) => (
+                                    <TextField
+                                        {...params}
+                                        placeholder={filterTeamleader.length === 0 ? "Semua Teamleader" : `${filterTeamleader.length} dipilih`}
+                                        size="small"
+                                        sx={{
+                                            '& .MuiOutlinedInput-root': {
+                                                borderRadius: 3, backgroundColor: 'white', fontSize: '0.9rem',
+                                                '& fieldset': { borderColor: '#e2e8f0' },
+                                                '&:hover fieldset': { borderColor: '#6366f1' },
+                                                '&.Mui-focused fieldset': { borderColor: '#6366f1', borderWidth: 2 }
+                                            }
+                                        }}
+                                        InputProps={{
+                                            ...params.InputProps,
+                                            startAdornment: (
+                                                <>
+                                                    <TeamIcon sx={{ color: 'text.secondary', mr: 1, fontSize: 20 }} />
+                                                    {params.InputProps?.startAdornment}
+                                                </>
+                                            )
+                                        }}
+                                    />
+                                )}
+                                renderTags={(tagValue, getTagProps) =>
+                                    tagValue.map((option, index) => (
+                                        <Chip {...getTagProps({ index })} key={option} label={option} size="small"
+                                            sx={{ bgcolor: '#e0e7ff', color: '#4338ca', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
+                                    ))
+                                }
+                            />
+                        </Box>
+
+                        {/* Area */}
+                        <Box sx={{ flex: 1 }}>
+                            <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
+                                Area <span style={{ color: '#94a3b8', fontWeight: 400 }}>(Kosong = Semua)</span>
+                            </Typography>
+                            <Autocomplete
+                                multiple
+                                options={uniqueAreas}
+                                value={filterArea}
+                                onChange={(e, newValue) => setFilterArea(newValue)}
+                                limitTags={1}
+                                disableCloseOnSelect
+                                renderOption={(props, option, { selected }) => (
+                                    <li {...props}>
+                                        <Checkbox checked={selected} sx={{ mr: 1 }} size="small" />
+                                        <ListItemText primary={option} />
+                                    </li>
+                                )}
+                                renderInput={(params) => (
+                                    <TextField
+                                        {...params}
+                                        placeholder={filterArea.length === 0 ? "Semua Area" : `${filterArea.length} dipilih`}
+                                        size="small"
+                                        sx={{
+                                            '& .MuiOutlinedInput-root': {
+                                                borderRadius: 3, backgroundColor: 'white', fontSize: '0.9rem',
+                                                '& fieldset': { borderColor: '#e2e8f0' },
+                                                '&:hover fieldset': { borderColor: '#c2410c' },
+                                                '&.Mui-focused fieldset': { borderColor: '#c2410c', borderWidth: 2 }
+                                            }
+                                        }}
+                                        InputProps={{
+                                            ...params.InputProps,
+                                            startAdornment: (
+                                                <>
+                                                    <LocationIcon sx={{ color: 'text.secondary', mr: 1, fontSize: 20 }} />
+                                                    {params.InputProps?.startAdornment}
+                                                </>
+                                            )
+                                        }}
+                                    />
+                                )}
+                                renderTags={(tagValue, getTagProps) =>
+                                    tagValue.map((option, index) => (
+                                        <Chip {...getTagProps({ index })} key={option} label={option} size="small"
+                                            sx={{ bgcolor: '#ffedd5', color: '#9a3412', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
+                                    ))
+                                }
+                            />
+                        </Box>
+
+                        {/* Channel */}
+                        <Box sx={{ flex: 1 }}>
+                            <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
+                                Channel <span style={{ color: '#94a3b8', fontWeight: 400 }}>(Kosong = Semua)</span>
+                            </Typography>
+                            <Autocomplete
+                                multiple
+                                options={CHANNEL_OPTIONS.map(c => c.value)}
+                                value={filterChannel}
+                                onChange={(e, newValue) => setFilterChannel(newValue)}
+                                disableCloseOnSelect
+                                getOptionLabel={(option) => {
+                                    const cfg = getChannelConfig(option);
+                                    return cfg.label;
+                                }}
+                                renderOption={(props, option, { selected }) => {
+                                    const cfg = getChannelConfig(option);
+                                    return (
+                                        <li {...props}>
+                                            <Checkbox checked={selected} sx={{ mr: 1 }} size="small" />
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: cfg.color }} />
+                                                <ListItemText primary={cfg.label} />
+                                            </Box>
+                                        </li>
+                                    );
+                                }}
+                                renderInput={(params) => (
+                                    <TextField
+                                        {...params}
+                                        placeholder={filterChannel.length === 0 ? "Semua Channel" : `${filterChannel.length} dipilih`}
+                                        size="small"
+                                        sx={{
+                                            '& .MuiOutlinedInput-root': {
+                                                borderRadius: 3, backgroundColor: 'white', fontSize: '0.9rem',
+                                                '& fieldset': { borderColor: '#e2e8f0' },
+                                                '&:hover fieldset': { borderColor: '#059669' },
+                                                '&.Mui-focused fieldset': { borderColor: '#059669', borderWidth: 2 }
+                                            }
+                                        }}
+                                        InputProps={{
+                                            ...params.InputProps,
+                                            startAdornment: (
+                                                <>
+                                                    <ChannelIcon sx={{ color: 'text.secondary', mr: 1, fontSize: 20 }} />
+                                                    {params.InputProps?.startAdornment}
+                                                </>
+                                            )
+                                        }}
+                                    />
+                                )}
+                                renderTags={(tagValue, getTagProps) =>
+                                    tagValue.map((option, index) => {
+                                        const cfg = getChannelConfig(option);
+                                        return (
+                                            <Chip {...getTagProps({ index })} key={option} label={cfg.label} size="small"
+                                                sx={{ bgcolor: cfg.bg, color: cfg.color, fontWeight: 600, fontSize: '0.7rem', height: 22, border: `1px solid ${cfg.color}30` }} />
+                                        );
+                                    })
+                                }
+                            />
+                        </Box>
+                    </Stack>
+
+                    {/* Row 3: Tanggal */}
+                    <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ alignItems: { xs: 'stretch', md: 'flex-end' } }}>
                         <Box sx={{ flex: 1 }}>
                             <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5 }}>Tanggal Mulai</Typography>
                             <DatePicker value={startDate} onChange={setStartDate} slotProps={{ textField: { fullWidth: true, sx: { '& .MuiOutlinedInput-root': { borderRadius: 3, backgroundColor: 'white', '& fieldset': { borderColor: '#e2e8f0' }, '&:hover fieldset': { borderColor: '#667eea' }, '&.Mui-focused fieldset': { borderColor: '#667eea', borderWidth: 2 } } } } }} />
                         </Box>
-                    </Stack>
-                    <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ alignItems: { xs: 'stretch', md: 'flex-end' } }}>
                         <Box sx={{ flex: 1 }}>
                             <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5 }}>Tanggal Akhir</Typography>
                             <DatePicker value={endDate} onChange={setEndDate} slotProps={{ textField: { fullWidth: true, sx: { '& .MuiOutlinedInput-root': { borderRadius: 3, backgroundColor: 'white', '& fieldset': { borderColor: '#e2e8f0' }, '&:hover fieldset': { borderColor: '#667eea' }, '&.Mui-focused fieldset': { borderColor: '#667eea', borderWidth: 2 } } } } }} />
@@ -966,20 +1153,39 @@ export default function ViewView() {
                     </Stack>
                 </Stack>
 
-                {isNamaFiltered && (
-                    <Box sx={{ mt: 2, p: 1.5, borderRadius: 2, bgcolor: '#eff6ff', border: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                        <Typography variant="caption" sx={{ color: '#1e40af', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                            SPG Dipilih ({filterNama.length}):
+                {/* ✅ Chip Ringkasan Filter Aktif */}
+                {totalActiveFilters > 0 && (
+                    <Box sx={{ mt: 2, p: 1.5, borderRadius: 2, bgcolor: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                        <Typography variant="caption" sx={{ color: '#475569', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            Filter Aktif:
                         </Typography>
                         {filterNama.map(nama => (
-                            <Chip
-                                key={nama}
-                                label={nama}
-                                size="small"
-                                onDelete={() => setFilterNama(prev => prev.filter(n => n !== nama))}
-                                sx={{ bgcolor: '#1e40af', color: 'white', fontWeight: 600, fontSize: '0.75rem', height: 24, '& .MuiChip-deleteIcon': { color: 'white', fontSize: 14 } }}
-                            />
+                            <Chip key={`nama-${nama}`} label={nama} size="small" onDelete={() => setFilterNama(prev => prev.filter(n => n !== nama))}
+                                sx={{ bgcolor: '#1e40af', color: 'white', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
                         ))}
+                        {filterTeamleader.map(tl => (
+                            <Chip key={`tl-${tl}`} label={`TL: ${tl}`} size="small" onDelete={() => setFilterTeamleader(prev => prev.filter(n => n !== tl))}
+                                sx={{ bgcolor: '#6366f1', color: 'white', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
+                        ))}
+                        {filterArea.map(area => (
+                            <Chip key={`area-${area}`} label={`Area: ${area}`} size="small" onDelete={() => setFilterArea(prev => prev.filter(n => n !== area))}
+                                sx={{ bgcolor: '#c2410c', color: 'white', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
+                        ))}
+                        {filterChannel.map(ch => {
+                            const cfg = getChannelConfig(ch);
+                            return (
+                                <Chip key={`ch-${ch}`} label={cfg.label} size="small" onDelete={() => setFilterChannel(prev => prev.filter(n => n !== ch))}
+                                    sx={{ bgcolor: cfg.bg, color: cfg.color, fontWeight: 600, fontSize: '0.7rem', height: 22, border: `1px solid ${cfg.color}30` }} />
+                            );
+                        })}
+                        {startDate && (
+                            <Chip label={`Mulai: ${formatDateIndo(formatDateLocal(startDate))}`} size="small" onDelete={() => setStartDate(null)}
+                                sx={{ bgcolor: '#f1f5f9', color: '#475569', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
+                        )}
+                        {endDate && (
+                            <Chip label={`Akhir: ${formatDateIndo(formatDateLocal(endDate))}`} size="small" onDelete={() => setEndDate(null)}
+                                sx={{ bgcolor: '#f1f5f9', color: '#475569', fontWeight: 600, fontSize: '0.7rem', height: 22 }} />
+                        )}
                     </Box>
                 )}
 
@@ -1001,7 +1207,7 @@ export default function ViewView() {
                 </Box>
             </Paper>
 
-            {/* ✅ Card Status SPG - Muncul juga saat custom filter */}
+            {/* Card Status SPG */}
             {isFiltered && targetNamas.length > 0 && (
                 <Paper elevation={0} sx={{
                     mb: 3, borderRadius: 4, overflow: 'hidden',
@@ -1083,7 +1289,7 @@ export default function ViewView() {
                 </Paper>
             )}
 
-            {/* ===== PIVOT VIEW - DENGAN PERMIT ===== */}
+            {/* ===== PIVOT VIEW ===== */}
             {viewMode === 'pivot' && isFiltered && (Object.keys(pivotData).length > 0 || permitData.length > 0) && (
                 <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, borderRadius: 4, border: '1px solid rgba(102,126,234,0.06)' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5, flexWrap: 'wrap' }}>
@@ -1093,19 +1299,8 @@ export default function ViewView() {
                             <Typography variant="caption" color="text.secondary">Total Rupiah per SPG per Tanggal (termasuk Permit)</Typography>
                         </Box>
                         <Tooltip title="Capture & Simpan sebagai PNG">
-                            <IconButton
-                                onClick={() => handleCapture('pivot')}
-                                disabled={isCapturing}
-                                className="capture-btn"
-                                sx={{
-                                    bgcolor: '#10b981',
-                                    color: 'white',
-                                    width: 40,
-                                    height: 40,
-                                    '&:hover': { bgcolor: '#059669' },
-                                    '&:disabled': { bgcolor: '#cbd5e1' }
-                                }}
-                            >
+                            <IconButton onClick={() => handleCapture('pivot')} disabled={isCapturing} className="capture-btn"
+                                sx={{ bgcolor: '#10b981', color: 'white', width: 40, height: 40, '&:hover': { bgcolor: '#059669' }, '&:disabled': { bgcolor: '#cbd5e1' } }}>
                                 {isCapturing ? <CircularProgress size={20} color="inherit" /> : <CameraIcon sx={{ fontSize: 20 }} />}
                             </IconButton>
                         </Tooltip>
@@ -1131,16 +1326,12 @@ export default function ViewView() {
                                                     {nama}
                                                 </Box>
                                             </TableCell>
-
                                             <TableCell align="center" sx={{ bgcolor: '#f5f3ff', fontWeight: 'bold', color: '#7c3aed', fontFamily: 'monospace', fontSize: '0.95rem', borderRight: '1px solid #e2e8f0' }}>
                                                 {Object.keys(pivotData[nama].totalByDate).length}
                                             </TableCell>
-
-                                            {/* ✅ CELL DENGAN LOGIKA PERMIT */}
                                             {allDates.map(d => {
                                                 const t = pivotData[nama].totalByDate[d] || 0;
                                                 const permit = permitsLookup[d]?.[nama];
-
                                                 if (permit) {
                                                     const cfg = PERMIT_CONFIG[permit.jenis] || PERMIT_CONFIG.Off;
                                                     const Icon = cfg.icon;
@@ -1149,19 +1340,15 @@ export default function ViewView() {
                                                             <Tooltip title={`${permit.jenis}${permit.catatan ? `: ${permit.catatan}` : ''}`}>
                                                                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
                                                                     <Icon sx={{ fontSize: 18, color: cfg.color }} />
-                                                                    <Typography variant="caption" sx={{ fontSize: '0.65rem', fontWeight: 'bold', color: cfg.color, lineHeight: 1 }}>
-                                                                        {cfg.label}
-                                                                    </Typography>
+                                                                    <Typography variant="caption" sx={{ fontSize: '0.65rem', fontWeight: 'bold', color: cfg.color, lineHeight: 1 }}>{cfg.label}</Typography>
                                                                 </Box>
                                                             </Tooltip>
                                                         </TableCell>
                                                     );
                                                 }
-
                                                 return (
                                                     <TableCell key={d} align="right" sx={{
-                                                        fontFamily: 'monospace',
-                                                        fontSize: '0.85rem',
+                                                        fontFamily: 'monospace', fontSize: '0.85rem',
                                                         color: t > 0 ? '#1e293b' : '#cbd5e1',
                                                         fontWeight: t > 0 ? 600 : 400
                                                     }}>
@@ -1169,72 +1356,53 @@ export default function ViewView() {
                                                     </TableCell>
                                                 );
                                             })}
-
                                             <TableCell align="right" sx={{ bgcolor: '#f0fdf4', fontWeight: 'bold', color: '#059669', fontFamily: 'monospace', fontSize: '0.9rem', borderLeft: '2px solid #059669' }}>
                                                 {formatRupiah(getGrandTotal(nama))}
                                             </TableCell>
                                         </TableRow>
                                     ))}
-
-                                    {/* Tampilkan juga baris untuk SPG yang hanya punya permit tapi tidak ada di pivotData */}
-                                    {inactiveNamas.filter(n => permitData.some(p => p.nama === n && allDates.includes(p.tanggal))).map((nama, ri) => {
-                                        const realIdx = Object.keys(pivotData).length + ri;
-                                        return (
-                                            <TableRow key={`permit-only-${nama}`} sx={{ bgcolor: '#fffbeb' }}>
-                                                <TableCell sx={{ position: 'sticky', left: 0, zIndex: 1, bgcolor: '#fffbeb', fontWeight: 'bold', fontSize: '0.85rem', borderRight: '1px solid #e2e8f0' }}>
-                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                                                        <Avatar sx={{ bgcolor: '#fef3c7', color: '#92400e', width: 32, height: 32, fontSize: '0.8rem' }}>{nama.charAt(0).toUpperCase()}</Avatar>
-                                                        <Box>
-                                                            <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '0.85rem' }}>{nama}</Typography>
-                                                            <Typography variant="caption" sx={{ color: '#b45309', fontSize: '0.65rem' }}>Hanya Permit</Typography>
-                                                        </Box>
+                                    {inactiveNamas.filter(n => permitData.some(p => p.nama === n && allDates.includes(p.tanggal))).map((nama, ri) => (
+                                        <TableRow key={`permit-only-${nama}`} sx={{ bgcolor: '#fffbeb' }}>
+                                            <TableCell sx={{ position: 'sticky', left: 0, zIndex: 1, bgcolor: '#fffbeb', fontWeight: 'bold', fontSize: '0.85rem', borderRight: '1px solid #e2e8f0' }}>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                                    <Avatar sx={{ bgcolor: '#fef3c7', color: '#92400e', width: 32, height: 32, fontSize: '0.8rem' }}>{nama.charAt(0).toUpperCase()}</Avatar>
+                                                    <Box>
+                                                        <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '0.85rem' }}>{nama}</Typography>
+                                                        <Typography variant="caption" sx={{ color: '#b45309', fontSize: '0.65rem' }}>Hanya Permit</Typography>
                                                     </Box>
-                                                </TableCell>
-                                                <TableCell align="center" sx={{ bgcolor: '#fffbeb', color: '#92400e', fontWeight: 'bold', fontFamily: 'monospace' }}>0</TableCell>
-                                                {allDates.map(d => {
-                                                    const permit = permitsLookup[d]?.[nama];
-                                                    if (permit) {
-                                                        const cfg = PERMIT_CONFIG[permit.jenis] || PERMIT_CONFIG.Off;
-                                                        const Icon = cfg.icon;
-                                                        return (
-                                                            <TableCell key={d} align="center" sx={{ bgcolor: cfg.bg, border: `1px solid ${cfg.color}30` }}>
-                                                                <Tooltip title={`${permit.jenis}${permit.catatan ? `: ${permit.catatan}` : ''}`}>
-                                                                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
-                                                                        <Icon sx={{ fontSize: 18, color: cfg.color }} />
-                                                                        <Typography variant="caption" sx={{ fontSize: '0.65rem', fontWeight: 'bold', color: cfg.color, lineHeight: 1 }}>
-                                                                            {cfg.label}
-                                                                        </Typography>
-                                                                    </Box>
-                                                                </Tooltip>
-                                                            </TableCell>
-                                                        );
-                                                    }
+                                                </Box>
+                                            </TableCell>
+                                            <TableCell align="center" sx={{ bgcolor: '#fffbeb', color: '#92400e', fontWeight: 'bold', fontFamily: 'monospace' }}>0</TableCell>
+                                            {allDates.map(d => {
+                                                const permit = permitsLookup[d]?.[nama];
+                                                if (permit) {
+                                                    const cfg = PERMIT_CONFIG[permit.jenis] || PERMIT_CONFIG.Off;
+                                                    const Icon = cfg.icon;
                                                     return (
-                                                        <TableCell key={d} align="right" sx={{ fontFamily: 'monospace', fontSize: '0.85rem', color: '#cbd5e1' }}>-</TableCell>
+                                                        <TableCell key={d} align="center" sx={{ bgcolor: cfg.bg, border: `1px solid ${cfg.color}30` }}>
+                                                            <Tooltip title={`${permit.jenis}${permit.catatan ? `: ${permit.catatan}` : ''}`}>
+                                                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
+                                                                    <Icon sx={{ fontSize: 18, color: cfg.color }} />
+                                                                    <Typography variant="caption" sx={{ fontSize: '0.65rem', fontWeight: 'bold', color: cfg.color, lineHeight: 1 }}>{cfg.label}</Typography>
+                                                                </Box>
+                                                            </Tooltip>
+                                                        </TableCell>
                                                     );
-                                                })}
-                                                <TableCell align="right" sx={{ bgcolor: '#fffbeb', fontWeight: 'bold', color: '#92400e', fontFamily: 'monospace', borderLeft: '2px solid #f59e0b' }}>
-                                                    Rp 0
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
-
+                                                }
+                                                return (<TableCell key={d} align="right" sx={{ fontFamily: 'monospace', fontSize: '0.85rem', color: '#cbd5e1' }}>-</TableCell>);
+                                            })}
+                                            <TableCell align="right" sx={{ bgcolor: '#fffbeb', fontWeight: 'bold', color: '#92400e', fontFamily: 'monospace', borderLeft: '2px solid #f59e0b' }}>Rp 0</TableCell>
+                                        </TableRow>
+                                    ))}
                                     <TableRow sx={{ bgcolor: '#1e3a8a' }}>
                                         <TableCell sx={{ position: 'sticky', left: 0, zIndex: 1, bgcolor: '#1e3a8a', fontWeight: 'bold', color: 'white', borderRight: '2px solid #1e40af' }}>GRAND TOTAL</TableCell>
                                         <TableCell align="center" sx={{ bgcolor: '#1e3a8a', color: 'white', fontWeight: 'bold' }}>-</TableCell>
                                         {allDates.map(d => {
                                             let dt = 0;
                                             Object.values(pivotData).forEach(nd => { dt += nd.totalByDate[d] || 0; });
-                                            return (
-                                                <TableCell key={d} align="right" sx={{ fontFamily: 'monospace', fontSize: '0.85rem', color: 'white', fontWeight: 'bold' }}>
-                                                    {dt > 0 ? formatRupiah(dt) : '-'}
-                                                </TableCell>
-                                            );
+                                            return (<TableCell key={d} align="right" sx={{ fontFamily: 'monospace', fontSize: '0.85rem', color: 'white', fontWeight: 'bold' }}>{dt > 0 ? formatRupiah(dt) : '-'}</TableCell>);
                                         })}
-                                        <TableCell align="right" sx={{ bgcolor: '#059669', fontWeight: 'bold', color: 'white', fontFamily: 'monospace', fontSize: '1rem', borderLeft: '2px solid #047857' }}>
-                                            {formatRupiah(getTotalAll())}
-                                        </TableCell>
+                                        <TableCell align="right" sx={{ bgcolor: '#059669', fontWeight: 'bold', color: 'white', fontFamily: 'monospace', fontSize: '1rem', borderLeft: '2px solid #047857' }}>{formatRupiah(getTotalAll())}</TableCell>
                                     </TableRow>
                                 </TableBody>
                             </Table>
@@ -1250,28 +1418,13 @@ export default function ViewView() {
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 1.5 }, flex: 1 }}>
                             <Avatar sx={{ bgcolor: '#667eea', width: { xs: 36, md: 40 }, height: { xs: 36, md: 40 } }}><CalendarIcon sx={{ fontSize: { xs: 18, md: 22 } }} /></Avatar>
                             <Box sx={{ flex: 1, minWidth: 0 }}>
-                                <Typography variant="h6" fontWeight="bold" sx={{ fontSize: { xs: '0.95rem', md: '1.1rem' }, color: '#667eea' }}>
-                                    Kalender Penjualan
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: '0.65rem', md: '0.75rem' } }}>
-                                    Klik tanggal untuk detail/permit
-                                </Typography>
+                                <Typography variant="h6" fontWeight="bold" sx={{ fontSize: { xs: '0.95rem', md: '1.1rem' }, color: '#667eea' }}>Kalender Penjualan</Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: '0.65rem', md: '0.75rem' } }}>Klik tanggal untuk detail/permit</Typography>
                             </Box>
                         </Box>
                         <Tooltip title="Capture & Simpan sebagai PNG">
-                            <IconButton
-                                onClick={() => handleCapture('calendar')}
-                                disabled={isCapturing}
-                                className="capture-btn"
-                                sx={{
-                                    bgcolor: '#10b981',
-                                    color: 'white',
-                                    width: 40,
-                                    height: 40,
-                                    '&:hover': { bgcolor: '#059669' },
-                                    '&:disabled': { bgcolor: '#cbd5e1' }
-                                }}
-                            >
+                            <IconButton onClick={() => handleCapture('calendar')} disabled={isCapturing} className="capture-btn"
+                                sx={{ bgcolor: '#10b981', color: 'white', width: 40, height: 40, '&:hover': { bgcolor: '#059669' }, '&:disabled': { bgcolor: '#cbd5e1' } }}>
                                 {isCapturing ? <CircularProgress size={20} color="inherit" /> : <CameraIcon sx={{ fontSize: 20 }} />}
                             </IconButton>
                         </Tooltip>
@@ -1291,30 +1444,13 @@ export default function ViewView() {
                                 isOptionEqualToValue={(option, value) => option === value}
                                 sx={{ flex: 1, minWidth: { xs: '100%', sm: 200 }, maxWidth: 300 }}
                                 renderInput={(params) => (
-                                    <TextField
-                                        {...params}
-                                        placeholder="Pilih nama SPG..."
-                                        size="small"
-                                        sx={{
-                                            '& .MuiOutlinedInput-root': {
-                                                bgcolor: 'white',
-                                                borderRadius: 2,
-                                                fontSize: '0.85rem',
-                                                '& fieldset': { borderColor: '#7dd3fc' },
-                                                '&:hover fieldset': { borderColor: '#0284c7' },
-                                                '&.Mui-focused fieldset': { borderColor: '#0284c7', borderWidth: 2 }
-                                            }
-                                        }}
-                                    />
+                                    <TextField {...params} placeholder="Pilih nama SPG..." size="small"
+                                        sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'white', borderRadius: 2, fontSize: '0.85rem', '& fieldset': { borderColor: '#7dd3fc' }, '&:hover fieldset': { borderColor: '#0284c7' }, '&.Mui-focused fieldset': { borderColor: '#0284c7', borderWidth: 2 } } }} />
                                 )}
                             />
                             {calendarFilterNama && (
-                                <Chip
-                                    label={`Aktif: ${calendarFilterNama}`}
-                                    size="small"
-                                    onDelete={() => setCalendarFilterNama('')}
-                                    sx={{ bgcolor: '#0284c7', color: 'white', fontWeight: 600, fontSize: '0.75rem' }}
-                                />
+                                <Chip label={`Aktif: ${calendarFilterNama}`} size="small" onDelete={() => setCalendarFilterNama('')}
+                                    sx={{ bgcolor: '#0284c7', color: 'white', fontWeight: 600, fontSize: '0.75rem' }} />
                             )}
                         </Box>
                     )}
@@ -1355,23 +1491,17 @@ export default function ViewView() {
                                         const permits = getPermitsByDate(dd.dateStr);
                                         const hasPermit = permits.length > 0;
                                         return (
-                                            <Box
-                                                key={di}
-                                                onClick={() => handleCalendarDateClick(dd.dateStr)}
+                                            <Box key={di} onClick={() => handleCalendarDateClick(dd.dateStr)}
                                                 sx={{
                                                     aspectRatio: '1',
                                                     bgcolor: hasData ? getIntensityColor(total, maxT) : (hasPermit ? '#fffbeb' : '#f8fafc'),
                                                     borderRadius: { xs: 1, md: 2 },
                                                     border: selectedDate === dd.dateStr ? '2px solid #667eea' : (hasPermit && !hasData ? '1px dashed #f59e0b' : '1px solid #e2e8f0'),
                                                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                                                    cursor: 'pointer',
-                                                    position: 'relative',
-                                                    transition: 'all 0.2s ease',
+                                                    cursor: 'pointer', position: 'relative', transition: 'all 0.2s ease',
                                                     '&:hover': { transform: 'scale(1.05)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' },
-                                                    p: { xs: 0.5, md: 1 },
-                                                    overflow: 'hidden'
-                                                }}
-                                            >
+                                                    p: { xs: 0.5, md: 1 }, overflow: 'hidden'
+                                                }}>
                                                 <Typography variant="body2" fontWeight="bold" sx={{ color: hasData ? 'white' : '#475569', fontSize: { xs: '0.7rem', md: '0.9rem' }, lineHeight: 1 }}>{dd.day}</Typography>
                                                 {hasData && (
                                                     <Typography variant="caption" sx={{ color: 'white', fontSize: { xs: '0.5rem', md: '0.65rem' }, fontWeight: 600, mt: 0.25 }}>
@@ -1393,16 +1523,12 @@ export default function ViewView() {
                                                                     <Typography variant="caption" sx={{
                                                                         fontSize: { xs: '0.5rem', md: '0.6rem' }, fontWeight: 'bold', color: cfg.color,
                                                                         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1
-                                                                    }}>
-                                                                        {p.jenis}
-                                                                    </Typography>
+                                                                    }}>{p.jenis}</Typography>
                                                                 </Box>
                                                             );
                                                         })}
                                                         {permits.length > 3 && (
-                                                            <Typography variant="caption" sx={{ fontSize: { xs: '0.5rem', md: '0.6rem' }, color: '#64748b', fontWeight: 'bold' }}>
-                                                                +{permits.length - 3}
-                                                            </Typography>
+                                                            <Typography variant="caption" sx={{ fontSize: { xs: '0.5rem', md: '0.6rem' }, color: '#64748b', fontWeight: 'bold' }}>+{permits.length - 3}</Typography>
                                                         )}
                                                     </Box>
                                                 )}
@@ -1453,22 +1579,15 @@ export default function ViewView() {
                                     <Divider sx={{ mb: 2 }} />
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
                                         <PermitIcon sx={{ color: '#f59e0b', fontSize: 20 }} />
-                                        <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#92400e' }}>
-                                            Permit Hari Ini ({getPermitsByDate(selectedDate).length})
-                                        </Typography>
+                                        <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#92400e' }}>Permit Hari Ini ({getPermitsByDate(selectedDate).length})</Typography>
                                     </Box>
                                     <Stack spacing={1}>
                                         {getPermitsByDate(selectedDate).map((permit) => {
                                             const cfg = PERMIT_CONFIG[permit.jenis] || PERMIT_CONFIG.Off;
                                             const Icon = cfg.icon;
                                             return (
-                                                <Box key={permit.id} sx={{
-                                                    display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5,
-                                                    bgcolor: cfg.bg, borderRadius: 2, border: `1px solid ${cfg.color}30`
-                                                }}>
-                                                    <Avatar sx={{ bgcolor: cfg.color, width: 32, height: 32 }}>
-                                                        <Icon sx={{ fontSize: 18, color: 'white' }} />
-                                                    </Avatar>
+                                                <Box key={permit.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, bgcolor: cfg.bg, borderRadius: 2, border: `1px solid ${cfg.color}30` }}>
+                                                    <Avatar sx={{ bgcolor: cfg.color, width: 32, height: 32 }}><Icon sx={{ fontSize: 18, color: 'white' }} /></Avatar>
                                                     <Box sx={{ flex: 1 }}>
                                                         <Typography variant="body2" fontWeight="bold" sx={{ color: '#1e293b', fontSize: '0.85rem' }}>{permit.nama}</Typography>
                                                         <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1477,9 +1596,7 @@ export default function ViewView() {
                                                         </Box>
                                                     </Box>
                                                     <Tooltip title="Hapus Permit">
-                                                        <IconButton color="error" size="small" onClick={() => handleDeletePermit(permit.id)} sx={{ bgcolor: 'white', '&:hover': { bgcolor: '#fee2e2' } }}>
-                                                            <DeleteIcon sx={{ fontSize: 16 }} />
-                                                        </IconButton>
+                                                        <IconButton color="error" size="small" onClick={() => handleDeletePermit(permit.id)} sx={{ bgcolor: 'white', '&:hover': { bgcolor: '#fee2e2' } }}><DeleteIcon sx={{ fontSize: 16 }} /></IconButton>
                                                     </Tooltip>
                                                 </Box>
                                             );
@@ -1498,14 +1615,9 @@ export default function ViewView() {
             )}
 
             {/* Dialog Permit */}
-            <Dialog
-                open={permitDialog.open}
-                onClose={() => !permitSubmitting && setPermitDialog({ open: false, dateStr: null })}
-                sx={{ '& .MuiDialog-paper': { borderRadius: 3, minWidth: { xs: 300, md: 420 }, m: { xs: 2, md: 'auto' } } }}
-            >
-                <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#f59e0b', pb: 1 }}>
-                    <PermitIcon /> Update Permit
-                </DialogTitle>
+            <Dialog open={permitDialog.open} onClose={() => !permitSubmitting && setPermitDialog({ open: false, dateStr: null })}
+                sx={{ '& .MuiDialog-paper': { borderRadius: 3, minWidth: { xs: 300, md: 420 }, m: { xs: 2, md: 'auto' } } }}>
+                <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#f59e0b', pb: 1 }}><PermitIcon /> Update Permit</DialogTitle>
                 <DialogContent>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                         Tanggal: <strong style={{ color: '#1e293b' }}>{permitDialog.dateStr ? formatDateIndo(permitDialog.dateStr) : '-'}</strong>
@@ -1522,18 +1634,8 @@ export default function ViewView() {
                                 getOptionLabel={(option) => option || ''}
                                 isOptionEqualToValue={(option, value) => option === value}
                                 renderInput={(params) => (
-                                    <TextField
-                                        {...params}
-                                        placeholder="Pilih nama SPG..."
-                                        sx={{
-                                            '& .MuiOutlinedInput-root': {
-                                                borderRadius: 2.5,
-                                                '& fieldset': { borderColor: '#e2e8f0' },
-                                                '&:hover fieldset': { borderColor: '#f59e0b' },
-                                                '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 }
-                                            }
-                                        }}
-                                    />
+                                    <TextField {...params} placeholder="Pilih nama SPG..."
+                                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2.5, '& fieldset': { borderColor: '#e2e8f0' }, '&:hover fieldset': { borderColor: '#f59e0b' }, '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 } } }} />
                                 )}
                                 noOptionsText="Tidak ada nama ditemukan"
                             />
@@ -1547,55 +1649,36 @@ export default function ViewView() {
                                     const Icon = cfg.icon;
                                     const isSelected = permitForm.jenis === key;
                                     return (
-                                        <Box
-                                            key={key}
-                                            onClick={() => setPermitForm({ ...permitForm, jenis: key })}
+                                        <Box key={key} onClick={() => setPermitForm({ ...permitForm, jenis: key })}
                                             sx={{
                                                 p: 1.5, borderRadius: 2,
                                                 border: `2px solid ${isSelected ? cfg.color : '#e2e8f0'}`,
                                                 bgcolor: isSelected ? cfg.bg : 'white',
                                                 cursor: 'pointer', transition: 'all 0.2s ease', textAlign: 'center',
                                                 '&:hover': { borderColor: cfg.color, transform: 'translateY(-1px)' }
-                                            }}
-                                        >
+                                            }}>
                                             <Icon sx={{ fontSize: 24, color: cfg.color, mb: 0.5 }} />
-                                            <Typography variant="body2" fontWeight="bold" sx={{ color: isSelected ? cfg.color : '#475569', fontSize: '0.8rem' }}>
-                                                {cfg.label}
-                                            </Typography>
+                                            <Typography variant="body2" fontWeight="bold" sx={{ color: isSelected ? cfg.color : '#475569', fontSize: '0.8rem' }}>{cfg.label}</Typography>
                                         </Box>
                                     );
                                 })}
                             </Box>
                         </Box>
                         <Box>
-                            <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
-                                Catatan (opsional)
-                            </Typography>
-                            <TextField
-                                fullWidth multiline rows={2}
-                                value={permitForm.catatan}
+                            <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>Catatan (opsional)</Typography>
+                            <TextField fullWidth multiline rows={2} value={permitForm.catatan}
                                 onChange={(e) => setPermitForm({ ...permitForm, catatan: e.target.value })}
                                 placeholder="Contoh: Demam, Acara keluarga, dll..."
-                                sx={{
-                                    '& .MuiOutlinedInput-root': {
-                                        borderRadius: 2.5,
-                                        '& fieldset': { borderColor: '#e2e8f0' },
-                                        '&:hover fieldset': { borderColor: '#f59e0b' },
-                                        '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 }
-                                    }
-                                }}
-                            />
+                                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2.5, '& fieldset': { borderColor: '#e2e8f0' }, '&:hover fieldset': { borderColor: '#f59e0b' }, '&.Mui-focused fieldset': { borderColor: '#f59e0b', borderWidth: 2 } } }} />
                         </Box>
                     </Stack>
                 </DialogContent>
                 <DialogActions sx={{ px: 3, pb: 2 }}>
                     <Button onClick={() => setPermitDialog({ open: false, dateStr: null })} variant="outlined" disabled={permitSubmitting} sx={{ borderRadius: 2 }}>Batal</Button>
-                    <Button
-                        onClick={handleSavePermit} variant="contained"
+                    <Button onClick={handleSavePermit} variant="contained"
                         disabled={permitSubmitting || !permitForm.nama}
                         startIcon={permitSubmitting ? <CircularProgress size={16} color="inherit" /> : <PermitIcon />}
-                        sx={{ borderRadius: 2, background: '#f59e0b', '&:hover': { background: '#d97706' }, '&:disabled': { background: '#cbd5e1' } }}
-                    >
+                        sx={{ borderRadius: 2, background: '#f59e0b', '&:hover': { background: '#d97706' }, '&:disabled': { background: '#cbd5e1' } }}>
                         {permitSubmitting ? 'Menyimpan...' : 'Simpan Permit'}
                     </Button>
                 </DialogActions>
