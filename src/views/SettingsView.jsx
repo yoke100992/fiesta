@@ -1,22 +1,30 @@
 import { useState, useEffect, useRef } from 'react';
 import {
     Box, Paper, TextField, Button,
-    Table, TableBody, TableCell, TableContainer, TableRow,
+    Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
     IconButton, Snackbar, Alert, Typography, Divider, Stack,
     LinearProgress, Tooltip, Avatar, Fade, Dialog, DialogTitle,
-    DialogContent, DialogContentText, DialogActions, Chip
+    DialogContent, DialogContentText, DialogActions, Chip,
+    Autocomplete, Select, MenuItem, FormControl, InputLabel
 } from '@mui/material';
 import {
     Delete as DeleteIcon, DeleteForever as DeleteForeverIcon,
-    Add as AddIcon,
+    Add as AddIcon, Edit as EditIcon,
     Download as DownloadIcon, Upload as UploadIcon,
     Group as GroupIcon, Inventory as InventoryIcon,
     ShoppingCart as CartIcon, Info as InfoIcon,
     Lock as LockIcon, WarningAmberRounded as WarningIcon,
-    FileDownload as FileDownloadIcon, CloudDownload as CloudDownloadIcon
+    FileDownload as FileDownloadIcon, CloudDownload as CloudDownloadIcon,
+    Save as SaveIcon, Person as PersonIcon,
+    LocationOn as LocationIcon, Leaderboard as TeamIcon,
+    Store as ChannelIcon
 } from '@mui/icons-material';
 import { ref, push, set, get, remove } from 'firebase/database';
 import { db } from '../utils/firebase';
+import {
+    getNamaDetailList, addNamaDetail, updateNamaDetail, deleteNamaDetail,
+    getTeamleaderList, getAreaList
+} from '../utils/storage';
 
 // ==========================================
 // FUNGSI BANTU: CSV PARSER
@@ -44,19 +52,16 @@ const parseCSV = (text) => {
 // ==========================================
 const downloadCSV = (data, headers, filename) => {
     if (!data || data.length === 0) return false;
-
-    const BOM = '\uFEFF'; // UTF-8 BOM untuk Excel
+    const BOM = '\uFEFF';
     const csvContent = [
         headers.join(','),
         ...data.map(item => headers.map(h => {
             const val = String(item[h] || '').replace(/"/g, '""');
-            // Jika ada koma atau quote, bungkus dengan quote
             return val.includes(',') || val.includes('"') || val.includes('\n')
                 ? `"${val}"`
                 : val;
         }).join(','))
     ].join('\n');
-
     const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
@@ -77,7 +82,7 @@ const downloadTemplate = (type) => {
     let csvContent = '';
     let filename = '';
     if (type === 'nama') {
-        csvContent = 'nama\nBudi Santoso\nSiti Aminah\nAndi Pratama';
+        csvContent = 'nama,channel,area,teamleader\nBudi Santoso,GT,Jakarta Pusat,Andi Wijaya\nSiti Aminah,MT,Bandung,Andi Wijaya\nAndi Pratama,GT,Surabaya,Budi Setiawan';
         filename = 'template_nama.csv';
     } else if (type === 'sku') {
         csvContent = 'sku\nFIESTA-RED-001\nFIESTA-BLUE-002\nFIESTA-GREEN-003';
@@ -98,6 +103,18 @@ const downloadTemplate = (type) => {
     document.body.removeChild(link);
 };
 
+// ==========================================
+// KONFIGURASI CHANNEL
+// ==========================================
+const CHANNEL_OPTIONS = [
+    { value: 'GT', label: 'GT (General Trade)', color: '#059669', bg: '#ecfdf5' },
+    { value: 'MT', label: 'MT (Modern Trade)', color: '#7c3aed', bg: '#f5f3ff' }
+];
+
+const getChannelConfig = (channel) => {
+    return CHANNEL_OPTIONS.find(c => c.value === channel) || { value: channel || '-', label: channel || '-', color: '#64748b', bg: '#f1f5f9' };
+};
+
 export default function SettingsView() {
     // --- PASSWORD STATE ---
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -107,8 +124,19 @@ export default function SettingsView() {
     // --- DATA STATE ---
     const [newNama, setNewNama] = useState('');
     const [newSku, setNewSku] = useState('');
-    const [namaList, setNamaList] = useState([]);
+    const [namaDetailList, setNamaDetailList] = useState([]); // ✅ Array of objects
     const [skuList, setSkuList] = useState([]);
+    const [teamleaderOptions, setTeamleaderOptions] = useState([]);
+    const [areaOptions, setAreaOptions] = useState([]);
+
+    // ✅ STATE: Dialog Add/Edit Nama
+    const [namaDialog, setNamaDialog] = useState({
+        open: false,
+        mode: 'add', // 'add' | 'edit'
+        id: null,
+        form: { nama: '', channel: 'GT', area: '', teamleader: '' },
+        saving: false
+    });
 
     // --- UPLOAD STATE ---
     const [uploading, setUploading] = useState(false);
@@ -117,22 +145,35 @@ export default function SettingsView() {
     const fileInputRef = useRef(null);
     const [activeUploadType, setActiveUploadType] = useState('');
 
-    // ? STATE BARU: Dialog Hapus All
+    // --- DELETE ALL DIALOG ---
     const [deleteAllDialog, setDeleteAllDialog] = useState({
         open: false,
-        type: '', // 'nama' | 'sku' | 'sellout'
+        type: '',
         confirmText: ''
     });
     const [isDeletingAll, setIsDeletingAll] = useState(false);
 
+    // ==========================================
+    // LOAD DATA
+    // ==========================================
     const loadData = async () => {
         try {
-            const namaSnap = await get(ref(db, 'nama'));
+            // Load nama dengan detail
+            const namaDetails = await getNamaDetailList();
+            setNamaDetailList(namaDetails);
+
+            // Load SKU
             const skuSnap = await get(ref(db, 'sku'));
-            const namaData = namaSnap.exists() ? Object.values(namaSnap.val()) : [];
             const skuData = skuSnap.exists() ? Object.values(skuSnap.val()) : [];
-            setNamaList(namaData.sort());
             setSkuList(skuData.sort());
+
+            // Load options untuk autocomplete
+            const [tlList, areaList] = await Promise.all([
+                getTeamleaderList(),
+                getAreaList()
+            ]);
+            setTeamleaderOptions(tlList);
+            setAreaOptions(areaList);
         } catch (error) {
             console.error("Error loading data:", error);
         }
@@ -151,44 +192,96 @@ export default function SettingsView() {
         }
     };
 
-    // --- MANUAL ADD/DELETE ---
-    const handleAddNama = async () => {
-        if (!newNama.trim()) return;
-        try {
-            await push(ref(db, 'nama'), newNama.trim());
-            setNewNama('');
-            await loadData();
-            setSnackbar({ open: true, message: 'Nama berhasil ditambahkan', severity: 'success' });
-        } catch (error) {
-            setSnackbar({ open: true, message: 'Gagal tambah nama', severity: 'error' });
-        }
+    // ==========================================
+    // ✅ FUNGSI BARU: OPEN DIALOG ADD/EDIT NAMA
+    // ==========================================
+    const openAddNamaDialog = () => {
+        setNamaDialog({
+            open: true,
+            mode: 'add',
+            id: null,
+            form: { nama: '', channel: 'GT', area: '', teamleader: '' },
+            saving: false
+        });
     };
 
-    const handleDeleteNama = async (name) => {
+    const openEditNamaDialog = (item) => {
+        setNamaDialog({
+            open: true,
+            mode: 'edit',
+            id: item.id,
+            form: {
+                nama: item.nama || '',
+                channel: item.channel || 'GT',
+                area: item.area || '',
+                teamleader: item.teamleader || ''
+            },
+            saving: false
+        });
+    };
+
+    const closeNamaDialog = () => {
+        if (namaDialog.saving) return;
+        setNamaDialog({ open: false, mode: 'add', id: null, form: { nama: '', channel: 'GT', area: '', teamleader: '' }, saving: false });
+    };
+
+    const handleSaveNama = async () => {
+        if (!namaDialog.form.nama.trim()) {
+            setSnackbar({ open: true, message: 'Nama SPG wajib diisi', severity: 'warning' });
+            return;
+        }
+
+        // Cek duplikat nama (kecuali saat edit dengan nama yang sama)
+        const isDuplicate = namaDetailList.some(item =>
+            item.nama.toLowerCase() === namaDialog.form.nama.trim().toLowerCase() &&
+            item.id !== namaDialog.id
+        );
+        if (isDuplicate) {
+            setSnackbar({ open: true, message: 'Nama SPG sudah ada!', severity: 'error' });
+            return;
+        }
+
+        setNamaDialog(prev => ({ ...prev, saving: true }));
         try {
-            const snap = await get(ref(db, 'nama'));
-            if (snap.exists()) {
-                const entries = Object.entries(snap.val());
-                for (const [key, val] of entries) {
-                    if (val === name) {
-                        await set(ref(db, `nama/${key}`), null);
-                        break;
-                    }
-                }
+            if (namaDialog.mode === 'add') {
+                await addNamaDetail(namaDialog.form);
+                setSnackbar({ open: true, message: `✅ SPG "${namaDialog.form.nama}" berhasil ditambahkan`, severity: 'success' });
+            } else {
+                await updateNamaDetail(namaDialog.id, namaDialog.form);
+                setSnackbar({ open: true, message: `✅ Data SPG berhasil diupdate`, severity: 'success' });
             }
+            closeNamaDialog();
             await loadData();
-            setSnackbar({ open: true, message: 'Nama dihapus', severity: 'success' });
         } catch (error) {
-            setSnackbar({ open: true, message: 'Gagal hapus nama', severity: 'error' });
+            setSnackbar({ open: true, message: 'Gagal: ' + error.message, severity: 'error' });
+            setNamaDialog(prev => ({ ...prev, saving: false }));
         }
     };
 
+    // ==========================================
+    // ✅ FUNGSI BARU: DELETE NAMA (dengan detail)
+    // ==========================================
+    const handleDeleteNama = async (id, nama) => {
+        if (!window.confirm(`Yakin hapus SPG "${nama}"?`)) return;
+        try {
+            await deleteNamaDetail(id);
+            setSnackbar({ open: true, message: `SPG "${nama}" berhasil dihapus`, severity: 'success' });
+            await loadData();
+        } catch (error) {
+            setSnackbar({ open: true, message: 'Gagal hapus: ' + error.message, severity: 'error' });
+        }
+    };
+
+    // ==========================================
+    // MANUAL ADD SKU
+    // ==========================================
     const handleAddSku = async () => {
         if (!newSku.trim()) return;
         try {
             await push(ref(db, 'sku'), newSku.trim());
             setNewSku('');
-            await loadData();
+            const skuSnap = await get(ref(db, 'sku'));
+            setSkuList(skuSnap.exists() ? Object.values(skuSnap.val()).sort() : []);
             setSnackbar({ open: true, message: 'SKU berhasil ditambahkan', severity: 'success' });
         } catch (error) {
             setSnackbar({ open: true, message: 'Gagal tambah SKU', severity: 'error' });
@@ -207,25 +300,33 @@ export default function SettingsView() {
                     }
                 }
             }
-            await loadData();
+            const skuSnap = await get(ref(db, 'sku'));
+            setSkuList(skuSnap.exists() ? Object.values(skuSnap.val()).sort() : []);
             setSnackbar({ open: true, message: 'SKU dihapus', severity: 'success' });
         } catch (error) {
             setSnackbar({ open: true, message: 'Gagal hapus SKU', severity: 'error' });
         }
     };
 
-    // ? FUNGSI BARU: Download Database
+    // ==========================================
+    // DOWNLOAD DATABASE
+    // ==========================================
     const handleDownloadDatabase = async (type) => {
         try {
             if (type === 'nama') {
-                if (namaList.length === 0) {
+                if (namaDetailList.length === 0) {
                     setSnackbar({ open: true, message: 'Tidak ada data nama untuk didownload', severity: 'warning' });
                     return;
                 }
-                const data = namaList.map(n => ({ nama: n }));
-                const success = downloadCSV(data, ['nama'], `database_nama_${new Date().toISOString().split('T')[0]}.csv`);
+                const data = namaDetailList.map(n => ({
+                    nama: n.nama,
+                    channel: n.channel || '',
+                    area: n.area || '',
+                    teamleader: n.teamleader || ''
+                }));
+                const success = downloadCSV(data, ['nama', 'channel', 'area', 'teamleader'], `database_nama_${new Date().toISOString().split('T')[0]}.csv`);
                 if (success) {
-                    setSnackbar({ open: true, message: `? ${namaList.length} data nama berhasil didownload`, severity: 'success' });
+                    setSnackbar({ open: true, message: `✅ ${namaDetailList.length} data nama berhasil didownload`, severity: 'success' });
                 }
             } else if (type === 'sku') {
                 if (skuList.length === 0) {
@@ -235,7 +336,7 @@ export default function SettingsView() {
                 const data = skuList.map(s => ({ sku: s }));
                 const success = downloadCSV(data, ['sku'], `database_sku_${new Date().toISOString().split('T')[0]}.csv`);
                 if (success) {
-                    setSnackbar({ open: true, message: `? ${skuList.length} data SKU berhasil didownload`, severity: 'success' });
+                    setSnackbar({ open: true, message: `✅ ${skuList.length} data SKU berhasil didownload`, severity: 'success' });
                 }
             }
         } catch (error) {
@@ -243,32 +344,30 @@ export default function SettingsView() {
         }
     };
 
-    // ? FUNGSI BARU: Hapus Semua Data
+    // ==========================================
+    // DELETE ALL
+    // ==========================================
     const handleDeleteAll = async () => {
         if (deleteAllDialog.confirmText !== 'HAPUS SEMUA') return;
-
         setIsDeletingAll(true);
         try {
             const type = deleteAllDialog.type;
             let count = 0;
-
             if (type === 'nama') {
-                count = namaList.length;
+                count = namaDetailList.length;
                 await remove(ref(db, 'nama'));
             } else if (type === 'sku') {
                 count = skuList.length;
                 await remove(ref(db, 'sku'));
             } else if (type === 'sellout') {
-                // Untuk sellout, kita hitung dulu jumlahnya
                 const snap = await get(ref(db, 'sellout'));
                 count = snap.exists() ? Object.keys(snap.val()).length : 0;
                 await remove(ref(db, 'sellout'));
             }
-
             await loadData();
             setSnackbar({
                 open: true,
-                message: `? ${count} data ${type} berhasil dihapus semua`,
+                message: `✅ ${count} data ${type} berhasil dihapus semua`,
                 severity: 'success'
             });
             setDeleteAllDialog({ open: false, type: '', confirmText: '' });
@@ -283,7 +382,9 @@ export default function SettingsView() {
         setDeleteAllDialog({ open: true, type, confirmText: '' });
     };
 
-    // --- BULK UPLOAD LOGIC ---
+    // ==========================================
+    // BULK UPLOAD
+    // ==========================================
     const handleFileUpload = async (event) => {
         const file = event.target.files[0];
         if (!file) return;
@@ -296,9 +397,18 @@ export default function SettingsView() {
                 const rows = parseCSV(text);
                 setUploadProgress(30);
                 if (rows.length === 0) throw new Error('File CSV kosong atau format salah');
+
                 if (activeUploadType === 'nama') {
+                    // ✅ Support upload nama dengan detail lengkap
                     for (const row of rows) {
-                        if (row.nama) await push(ref(db, 'nama'), row.nama);
+                        if (row.nama) {
+                            await push(ref(db, 'nama'), {
+                                nama: row.nama,
+                                channel: row.channel || '',
+                                area: row.area || '',
+                                teamleader: row.teamleader || ''
+                            });
+                        }
                     }
                 } else if (activeUploadType === 'sku') {
                     for (const row of rows) {
@@ -399,7 +509,7 @@ export default function SettingsView() {
     // ==========================================
     return (
         <Box sx={{ pb: 8 }}>
-            {/* ========== ? SECTION BARU: EXPORT DATABASE ========== */}
+            {/* ========== 📥 SECTION: EXPORT DATABASE ========== */}
             <Paper elevation={0} sx={{
                 p: { xs: 2, md: 3 }, mb: 3, borderRadius: 4,
                 border: '1px solid rgba(16, 185, 129, 0.15)',
@@ -419,15 +529,13 @@ export default function SettingsView() {
                         </Typography>
                     </Box>
                     <Chip
-                        label={`${namaList.length + skuList.length} Data`}
+                        label={`${namaDetailList.length + skuList.length} Data`}
                         size="small"
                         sx={{ bgcolor: '#059669', color: 'white', fontWeight: 'bold', fontSize: '0.75rem' }}
                     />
                 </Box>
                 <Divider sx={{ mb: 2.5 }} />
-
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 2 }}>
-                    {/* Download Nama */}
                     <Paper sx={{
                         p: 2.5, borderRadius: 3, border: '1px solid #bbf7d0',
                         background: 'white', textAlign: 'center',
@@ -437,12 +545,12 @@ export default function SettingsView() {
                         <GroupIcon sx={{ fontSize: 40, color: '#059669', mb: 1 }} />
                         <Typography fontWeight="bold" sx={{ mb: 0.5, color: '#1e293b' }}>Database Nama SPG</Typography>
                         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-                            {namaList.length} nama tersimpan
+                            {namaDetailList.length} nama tersimpan
                         </Typography>
                         <Button
                             variant="contained" fullWidth startIcon={<FileDownloadIcon />}
                             onClick={() => handleDownloadDatabase('nama')}
-                            disabled={namaList.length === 0}
+                            disabled={namaDetailList.length === 0}
                             sx={{
                                 borderRadius: 2.5, textTransform: 'none', fontWeight: 600,
                                 background: '#059669',
@@ -453,8 +561,6 @@ export default function SettingsView() {
                             Download Nama (CSV)
                         </Button>
                     </Paper>
-
-                    {/* Download SKU */}
                     <Paper sx={{
                         p: 2.5, borderRadius: 3, border: '1px solid #bbf7d0',
                         background: 'white', textAlign: 'center',
@@ -509,12 +615,14 @@ export default function SettingsView() {
                         <InfoIcon sx={{ color: '#1e40af', mt: 0.2, flexShrink: 0 }} />
                         <Typography variant="body2" sx={{ color: '#1e3a8a', fontSize: '0.85rem', lineHeight: 1.6 }}>
                             <strong>Cara Pakai:</strong> Download template di bawah, isi data di Excel, simpan sebagai <strong>CSV UTF-8</strong>, lalu upload kembali.
+                            <br />
+                            <strong>Template Nama</strong> sekarang mendukung kolom: <code>nama, channel, area, teamleader</code>
                         </Typography>
                     </Box>
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2.5 }}>
                         {['nama', 'sku', 'sellout'].map((type) => {
                             const config = {
-                                nama: { icon: <GroupIcon sx={{ fontSize: 40, color: '#1e40af' }} />, title: 'Master Nama SPG', desc: 'Kelola daftar nama' },
+                                nama: { icon: <GroupIcon sx={{ fontSize: 40, color: '#1e40af' }} />, title: 'Master Nama SPG', desc: 'Kelola daftar nama + info' },
                                 sku: { icon: <InventoryIcon sx={{ fontSize: 40, color: '#1e40af' }} />, title: 'Master SKU', desc: 'Kelola daftar produk' },
                                 sellout: { icon: <CartIcon sx={{ fontSize: 40, color: '#1e40af' }} />, title: 'Data Penjualan', desc: 'Inject data transaksi' }
                             }[type];
@@ -552,179 +660,354 @@ export default function SettingsView() {
                     )}
                 </Stack>
             </Paper>
-
             <input type="file" accept=".csv" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileUpload} />
 
-            {/* ========== ? SECTION BARU: DANGER ZONE ========== */}
-            <Paper elevation={0} sx={{
-                p: { xs: 2, md: 3 }, mb: 3, borderRadius: 4,
-                border: '2px solid #fecaca',
-                background: 'linear-gradient(135deg, #fef2f2 0%, #ffffff 100%)',
-                boxShadow: '0 2px 12px rgba(239, 68, 68, 0.08)'
-            }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
-                    <Avatar sx={{ bgcolor: '#ef4444', width: 44, height: 44, boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)' }}>
-                        <WarningIcon sx={{ fontSize: 22 }} />
-                    </Avatar>
-                    <Box>
-                        <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1.1rem', color: '#991b1b', lineHeight: 1.2 }}>
-                            Danger Zone
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: '#b91c1c' }}>
-                            ?? Aksi permanen - data tidak dapat dikembalikan
-                        </Typography>
-                    </Box>
-                </Box>
-                <Divider sx={{ mb: 2.5, borderColor: '#fecaca' }} />
-
-                <Box sx={{ p: 2, borderRadius: 3, bgcolor: '#fef2f2', border: '1px dashed #fca5a5', mb: 2.5, display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
-                    <WarningIcon sx={{ color: '#dc2626', mt: 0.2, flexShrink: 0 }} />
-                    <Typography variant="body2" sx={{ color: '#991b1b', fontSize: '0.85rem', lineHeight: 1.6 }}>
-                        <strong>Peringatan:</strong> Tombol di bawah akan menghapus <strong>SEMUA</strong> data secara permanen.
-                        Pastikan Anda sudah <strong>backup/export</strong> data terlebih dahulu jika diperlukan.
-                    </Typography>
-                </Box>
-
-                <Stack spacing={2}>
-                    {/* Hapus Semua Nama */}
-                    <Box sx={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        p: 2, borderRadius: 3, border: '1px solid #fecaca', bgcolor: 'white',
-                        flexWrap: 'wrap', gap: 1.5
-                    }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                            <GroupIcon sx={{ color: '#dc2626', fontSize: 28 }} />
-                            <Box>
-                                <Typography fontWeight="bold" sx={{ color: '#1e293b', fontSize: '0.95rem' }}>
-                                    Hapus Semua Nama SPG
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                    {namaList.length} nama akan dihapus permanen
-                                </Typography>
-                            </Box>
-                        </Box>
-                        <Button
-                            variant="contained" color="error"
-                            startIcon={<DeleteForeverIcon />}
-                            onClick={() => openDeleteAllDialog('nama')}
-                            disabled={namaList.length === 0}
-                            sx={{
-                                borderRadius: 2.5, textTransform: 'none', fontWeight: 600,
-                                background: '#dc2626',
-                                '&:hover': { background: '#b91c1c' },
-                                '&:disabled': { background: '#cbd5e1' }
-                            }}
-                        >
-                            Hapus Semua Nama
-                        </Button>
-                    </Box>
-
-                    {/* Hapus Semua SKU */}
-                    <Box sx={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        p: 2, borderRadius: 3, border: '1px solid #fecaca', bgcolor: 'white',
-                        flexWrap: 'wrap', gap: 1.5
-                    }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                            <InventoryIcon sx={{ color: '#dc2626', fontSize: 28 }} />
-                            <Box>
-                                <Typography fontWeight="bold" sx={{ color: '#1e293b', fontSize: '0.95rem' }}>
-                                    Hapus Semua SKU
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                    {skuList.length} SKU akan dihapus permanen
-                                </Typography>
-                            </Box>
-                        </Box>
-                        <Button
-                            variant="contained" color="error"
-                            startIcon={<DeleteForeverIcon />}
-                            onClick={() => openDeleteAllDialog('sku')}
-                            disabled={skuList.length === 0}
-                            sx={{
-                                borderRadius: 2.5, textTransform: 'none', fontWeight: 600,
-                                background: '#dc2626',
-                                '&:hover': { background: '#b91c1c' },
-                                '&:disabled': { background: '#cbd5e1' }
-                            }}
-                        >
-                            Hapus Semua SKU
-                        </Button>
-                    </Box>
-
-                    {/* Hapus Semua Data Penjualan */}
-                    <Box sx={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        p: 2, borderRadius: 3, border: '2px solid #ef4444', bgcolor: '#fff5f5',
-                        flexWrap: 'wrap', gap: 1.5
-                    }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                            <CartIcon sx={{ color: '#dc2626', fontSize: 28 }} />
-                            <Box>
-                                <Typography fontWeight="bold" sx={{ color: '#991b1b', fontSize: '0.95rem' }}>
-                                    Hapus Semua Data Penjualan
-                                </Typography>
-                                <Typography variant="caption" sx={{ color: '#b91c1c' }}>
-                                    ?? Semua transaksi sell-out akan dihapus
-                                </Typography>
-                            </Box>
-                        </Box>
-                        <Button
-                            variant="contained" color="error"
-                            startIcon={<DeleteForeverIcon />}
-                            onClick={() => openDeleteAllDialog('sellout')}
-                            sx={{
-                                borderRadius: 2.5, textTransform: 'none', fontWeight: 600,
-                                background: '#dc2626',
-                                '&:hover': { background: '#b91c1c' }
-                            }}
-                        >
-                            Hapus Semua Penjualan
-                        </Button>
-                    </Box>
-                </Stack>
-            </Paper>
-
-            {/* ========== MANUAL INPUT NAMA ========== */}
+            {/* ========== ✅ SECTION BARU: KELOLA NAMA SPG (WITH DETAIL) ========== */}
             <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, mb: 3, borderRadius: 4, boxShadow: '0 2px 12px rgba(30, 64, 175, 0.04)', border: '1px solid rgba(30, 64, 175, 0.08)' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5, flexWrap: 'wrap' }}>
                     <Avatar sx={{ bgcolor: '#eff6ff', width: 40, height: 40 }}>
                         <GroupIcon sx={{ color: '#1e40af', fontSize: 20 }} />
                     </Avatar>
-                    <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1.05rem', color: '#1e40af' }}>Kelola Nama SPG</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', gap: 1.5, mb: 2.5 }}>
-                    <TextField size="small" fullWidth value={newNama} onChange={(e) => setNewNama(e.target.value)}
-                        placeholder="Ketik nama baru..."
-                        onKeyDown={(e) => e.key === 'Enter' && handleAddNama()}
-                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2.5, '& fieldset': { borderColor: '#e2e8f0' } } }} />
-                    <Button variant="contained" onClick={handleAddNama} startIcon={<AddIcon />} sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 600, px: 3, background: '#1e40af', '&:hover': { background: '#1e3a8a' } }}>
-                        Tambah
+                    <Box sx={{ flex: 1 }}>
+                        <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1.05rem', color: '#1e40af' }}>
+                            Kelola Data SPG
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            Tambah, edit, dan hapus data SPG beserta informasi Channel, Area, dan Teamleader
+                        </Typography>
+                    </Box>
+                    <Chip
+                        label={`${namaDetailList.length} SPG`}
+                        size="small"
+                        sx={{ bgcolor: '#1e40af', color: 'white', fontWeight: 'bold', fontSize: '0.75rem' }}
+                    />
+                    <Button
+                        variant="contained"
+                        startIcon={<AddIcon />}
+                        onClick={openAddNamaDialog}
+                        sx={{
+                            borderRadius: 2.5, textTransform: 'none', fontWeight: 600,
+                            background: '#1e40af',
+                            '&:hover': { background: '#1e3a8a' }
+                        }}
+                    >
+                        Tambah SPG
                     </Button>
                 </Box>
-                <TableContainer sx={{ borderRadius: 3, border: '1px solid #e2e8f0', maxHeight: 250 }}>
-                    <Table size="small">
+
+                {/* Statistik Channel */}
+                {namaDetailList.length > 0 && (
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, gap: 1.5, mb: 2.5 }}>
+                        <Paper sx={{ p: 1.5, borderRadius: 2, bgcolor: '#f8fafc', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', textTransform: 'uppercase', fontWeight: 700 }}>Total SPG</Typography>
+                            <Typography variant="h6" fontWeight="bold" sx={{ color: '#1e40af', fontSize: '1.25rem' }}>{namaDetailList.length}</Typography>
+                        </Paper>
+                        <Paper sx={{ p: 1.5, borderRadius: 2, bgcolor: '#ecfdf5', border: '1px solid #bbf7d0', textAlign: 'center' }}>
+                            <Typography variant="caption" sx={{ fontSize: '0.7rem', textTransform: 'uppercase', fontWeight: 700, color: '#065f46' }}>Channel GT</Typography>
+                            <Typography variant="h6" fontWeight="bold" sx={{ color: '#059669', fontSize: '1.25rem' }}>
+                                {namaDetailList.filter(n => n.channel === 'GT').length}
+                            </Typography>
+                        </Paper>
+                        <Paper sx={{ p: 1.5, borderRadius: 2, bgcolor: '#f5f3ff', border: '1px solid #ddd6fe', textAlign: 'center' }}>
+                            <Typography variant="caption" sx={{ fontSize: '0.7rem', textTransform: 'uppercase', fontWeight: 700, color: '#5b21b6' }}>Channel MT</Typography>
+                            <Typography variant="h6" fontWeight="bold" sx={{ color: '#7c3aed', fontSize: '1.25rem' }}>
+                                {namaDetailList.filter(n => n.channel === 'MT').length}
+                            </Typography>
+                        </Paper>
+                        <Paper sx={{ p: 1.5, borderRadius: 2, bgcolor: '#fff7ed', border: '1px solid #fed7aa', textAlign: 'center' }}>
+                            <Typography variant="caption" sx={{ fontSize: '0.7rem', textTransform: 'uppercase', fontWeight: 700, color: '#9a3412' }}>Area</Typography>
+                            <Typography variant="h6" fontWeight="bold" sx={{ color: '#c2410c', fontSize: '1.25rem' }}>
+                                {new Set(namaDetailList.map(n => n.area).filter(a => a)).size}
+                            </Typography>
+                        </Paper>
+                    </Box>
+                )}
+
+                <TableContainer sx={{ borderRadius: 3, border: '1px solid #e2e8f0', maxHeight: 500 }}>
+                    <Table size="small" stickyHeader>
+                        <TableHead>
+                            <TableRow>
+                                <TableCell sx={{ background: '#1e40af', color: 'white', fontWeight: 'bold', fontSize: '0.8rem' }}>No</TableCell>
+                                <TableCell sx={{ background: '#1e40af', color: 'white', fontWeight: 'bold', fontSize: '0.8rem', minWidth: 150 }}>Nama SPG</TableCell>
+                                <TableCell sx={{ background: '#1e40af', color: 'white', fontWeight: 'bold', fontSize: '0.8rem', minWidth: 90 }} align="center">Channel</TableCell>
+                                <TableCell sx={{ background: '#1e40af', color: 'white', fontWeight: 'bold', fontSize: '0.8rem', minWidth: 120 }}>Area</TableCell>
+                                <TableCell sx={{ background: '#1e40af', color: 'white', fontWeight: 'bold', fontSize: '0.8rem', minWidth: 130 }}>Teamleader</TableCell>
+                                <TableCell sx={{ background: '#1e40af', color: 'white', fontWeight: 'bold', fontSize: '0.8rem', minWidth: 90 }} align="center">Aksi</TableCell>
+                            </TableRow>
+                        </TableHead>
                         <TableBody>
-                            {namaList.length === 0 ? (
-                                <TableRow><TableCell align="center" sx={{ py: 4, color: '#94a3b8', fontSize: '0.9rem' }}>Belum ada data nama</TableCell></TableRow>
-                            ) : namaList.map(n => (
-                                <TableRow key={n} hover sx={{ '&:last-child td': { borderBottom: 0 } }}>
-                                    <TableCell sx={{ fontSize: '0.9rem', color: '#334155', py: 1.5 }}>{n}</TableCell>
-                                    <TableCell align="right" sx={{ py: 1.5 }}>
-                                        <Tooltip title="Hapus">
-                                            <IconButton color="error" size="small" onClick={() => handleDeleteNama(n)} sx={{ '&:hover': { bgcolor: '#fee2e2' } }}>
-                                                <DeleteIcon sx={{ fontSize: 18 }} />
-                                            </IconButton>
-                                        </Tooltip>
+                            {namaDetailList.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={6} align="center" sx={{ py: 4, color: '#94a3b8', fontSize: '0.9rem' }}>
+                                        Belum ada data SPG. Klik "Tambah SPG" untuk memulai.
                                     </TableCell>
                                 </TableRow>
-                            ))}
+                            ) : namaDetailList.map((item, idx) => {
+                                const chCfg = getChannelConfig(item.channel);
+                                return (
+                                    <TableRow key={item.id} hover sx={{ '&:last-child td': { borderBottom: 0 } }}>
+                                        <TableCell sx={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>{idx + 1}</TableCell>
+                                        <TableCell sx={{ fontSize: '0.9rem', color: '#1e293b', fontWeight: 600, py: 1.5 }}>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <Avatar sx={{ bgcolor: '#eff6ff', color: '#1e40af', width: 28, height: 28, fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                                    {(item.nama || '?').charAt(0).toUpperCase()}
+                                                </Avatar>
+                                                {item.nama}
+                                            </Box>
+                                        </TableCell>
+                                        <TableCell align="center" sx={{ py: 1.5 }}>
+                                            {item.channel ? (
+                                                <Chip
+                                                    label={chCfg.label}
+                                                    size="small"
+                                                    sx={{
+                                                        bgcolor: chCfg.bg,
+                                                        color: chCfg.color,
+                                                        fontWeight: 'bold',
+                                                        fontSize: '0.7rem',
+                                                        height: 24,
+                                                        border: `1px solid ${chCfg.color}30`
+                                                    }}
+                                                />
+                                            ) : (
+                                                <Typography variant="caption" sx={{ color: '#cbd5e1', fontStyle: 'italic' }}>-</Typography>
+                                            )}
+                                        </TableCell>
+                                        <TableCell sx={{ fontSize: '0.85rem', color: '#334155', py: 1.5 }}>
+                                            {item.area || <Typography component="span" variant="caption" sx={{ color: '#cbd5e1', fontStyle: 'italic' }}>-</Typography>}
+                                        </TableCell>
+                                        <TableCell sx={{ fontSize: '0.85rem', color: '#334155', py: 1.5 }}>
+                                            {item.teamleader || <Typography component="span" variant="caption" sx={{ color: '#cbd5e1', fontStyle: 'italic' }}>-</Typography>}
+                                        </TableCell>
+                                        <TableCell align="center" sx={{ py: 1.5 }}>
+                                            <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+                                                <Tooltip title="Edit">
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={() => openEditNamaDialog(item)}
+                                                        sx={{
+                                                            bgcolor: '#eff6ff',
+                                                            color: '#1e40af',
+                                                            '&:hover': { bgcolor: '#dbeafe' }
+                                                        }}
+                                                    >
+                                                        <EditIcon sx={{ fontSize: 16 }} />
+                                                    </IconButton>
+                                                </Tooltip>
+                                                <Tooltip title="Hapus">
+                                                    <IconButton
+                                                        color="error"
+                                                        size="small"
+                                                        onClick={() => handleDeleteNama(item.id, item.nama)}
+                                                        sx={{ bgcolor: '#fef2f2', '&:hover': { bgcolor: '#fee2e2' } }}
+                                                    >
+                                                        <DeleteIcon sx={{ fontSize: 16 }} />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            </Box>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
                         </TableBody>
                     </Table>
                 </TableContainer>
             </Paper>
 
-            {/* ========== MANUAL INPUT SKU ========== */}
+            {/* ========== ✅ DIALOG ADD/EDIT NAMA SPG ========== */}
+            <Dialog
+                open={namaDialog.open}
+                onClose={closeNamaDialog}
+                maxWidth="sm"
+                fullWidth
+                sx={{ '& .MuiDialog-paper': { borderRadius: 3, m: { xs: 2, md: 'auto' } } }}
+            >
+                <DialogTitle sx={{
+                    display: 'flex', alignItems: 'center', gap: 1.5, pb: 1,
+                    background: namaDialog.mode === 'add'
+                        ? 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)'
+                        : 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)'
+                }}>
+                    <Avatar sx={{
+                        bgcolor: namaDialog.mode === 'add' ? '#1e40af' : '#d97706',
+                        width: 40, height: 40
+                    }}>
+                        {namaDialog.mode === 'add' ? <AddIcon /> : <EditIcon />}
+                    </Avatar>
+                    <Box>
+                        <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1.1rem', lineHeight: 1.2 }}>
+                            {namaDialog.mode === 'add' ? 'Tambah SPG Baru' : 'Edit Data SPG'}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            {namaDialog.mode === 'add' ? 'Lengkapi informasi SPG di bawah' : 'Perbarui informasi SPG'}
+                        </Typography>
+                    </Box>
+                </DialogTitle>
+                <DialogContent sx={{ pt: 3 }}>
+                    <Stack spacing={2.5}>
+                        {/* Nama SPG */}
+                        <Box>
+                            <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
+                                Nama SPG <span style={{ color: '#ef4444' }}>*</span>
+                            </Typography>
+                            <TextField
+                                fullWidth
+                                value={namaDialog.form.nama}
+                                onChange={(e) => setNamaDialog(prev => ({ ...prev, form: { ...prev.form, nama: e.target.value } }))}
+                                placeholder="Contoh: Budi Santoso"
+                                disabled={namaDialog.saving}
+                                sx={{
+                                    '& .MuiOutlinedInput-root': {
+                                        borderRadius: 2.5,
+                                        '& fieldset': { borderColor: '#e2e8f0' },
+                                        '&:hover fieldset': { borderColor: '#1e40af' },
+                                        '&.Mui-focused fieldset': { borderColor: '#1e40af', borderWidth: 2 }
+                                    }
+                                }}
+                                InputProps={{
+                                    startAdornment: <PersonIcon sx={{ color: 'text.secondary', mr: 1, fontSize: 20 }} />
+                                }}
+                            />
+                        </Box>
+
+                        {/* Channel GT/MT */}
+                        <Box>
+                            <Typography variant="caption" sx={{ color: 'text.secondary', mb: 1, display: 'block', ml: 0.5, fontWeight: 600 }}>
+                                Channel <span style={{ color: '#ef4444' }}>*</span>
+                            </Typography>
+                            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5 }}>
+                                {CHANNEL_OPTIONS.map(opt => {
+                                    const isSelected = namaDialog.form.channel === opt.value;
+                                    return (
+                                        <Box
+                                            key={opt.value}
+                                            onClick={() => !namaDialog.saving && setNamaDialog(prev => ({ ...prev, form: { ...prev.form, channel: opt.value } }))}
+                                            sx={{
+                                                p: 2, borderRadius: 2, cursor: 'pointer',
+                                                border: `2px solid ${isSelected ? opt.color : '#e2e8f0'}`,
+                                                bgcolor: isSelected ? opt.bg : 'white',
+                                                transition: 'all 0.2s ease',
+                                                textAlign: 'center',
+                                                '&:hover': { borderColor: opt.color, transform: 'translateY(-1px)' }
+                                            }}
+                                        >
+                                            <ChannelIcon sx={{ fontSize: 28, color: opt.color, mb: 0.5 }} />
+                                            <Typography variant="body2" fontWeight="bold" sx={{ color: isSelected ? opt.color : '#475569', fontSize: '0.85rem' }}>
+                                                {opt.value}
+                                            </Typography>
+                                            <Typography variant="caption" sx={{ color: '#64748b', fontSize: '0.7rem', display: 'block' }}>
+                                                {opt.value === 'GT' ? 'General Trade' : 'Modern Trade'}
+                                            </Typography>
+                                        </Box>
+                                    );
+                                })}
+                            </Box>
+                        </Box>
+
+                        {/* Area */}
+                        <Box>
+                            <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
+                                Area
+                            </Typography>
+                            <Autocomplete
+                                freeSolo
+                                options={areaOptions}
+                                value={namaDialog.form.area}
+                                onChange={(e, v) => setNamaDialog(prev => ({ ...prev, form: { ...prev.form, area: v || '' } }))}
+                                onInputChange={(e, v) => setNamaDialog(prev => ({ ...prev, form: { ...prev.form, area: v } }))}
+                                disabled={namaDialog.saving}
+                                renderInput={(params) => (
+                                    <TextField
+                                        {...params}
+                                        placeholder="Contoh: Jakarta Pusat"
+                                        sx={{
+                                            '& .MuiOutlinedInput-root': {
+                                                borderRadius: 2.5,
+                                                '& fieldset': { borderColor: '#e2e8f0' },
+                                                '&:hover fieldset': { borderColor: '#1e40af' },
+                                                '&.Mui-focused fieldset': { borderColor: '#1e40af', borderWidth: 2 }
+                                            }
+                                        }}
+                                        InputProps={{
+                                            ...params.InputProps,
+                                            startAdornment: <LocationOn sx={{ color: 'text.secondary', mr: 1, fontSize: 20 }} />
+                                        }}
+                                    />
+                                )}
+                            />
+                            {areaOptions.length > 0 && (
+                                <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: '0.7rem', mt: 0.5, ml: 0.5, display: 'block' }}>
+                                    💡 Pilih dari list atau ketik area baru
+                                </Typography>
+                            )}
+                        </Box>
+
+                        {/* Teamleader */}
+                        <Box>
+                            <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
+                                Nama Teamleader
+                            </Typography>
+                            <Autocomplete
+                                freeSolo
+                                options={teamleaderOptions}
+                                value={namaDialog.form.teamleader}
+                                onChange={(e, v) => setNamaDialog(prev => ({ ...prev, form: { ...prev.form, teamleader: v || '' } }))}
+                                onInputChange={(e, v) => setNamaDialog(prev => ({ ...prev, form: { ...prev.form, teamleader: v } }))}
+                                disabled={namaDialog.saving}
+                                renderInput={(params) => (
+                                    <TextField
+                                        {...params}
+                                        placeholder="Contoh: Andi Wijaya"
+                                        sx={{
+                                            '& .MuiOutlinedInput-root': {
+                                                borderRadius: 2.5,
+                                                '& fieldset': { borderColor: '#e2e8f0' },
+                                                '&:hover fieldset': { borderColor: '#1e40af' },
+                                                '&.Mui-focused fieldset': { borderColor: '#1e40af', borderWidth: 2 }
+                                            }
+                                        }}
+                                        InputProps={{
+                                            ...params.InputProps,
+                                            startAdornment: <TeamIcon sx={{ color: 'text.secondary', mr: 1, fontSize: 20 }} />
+                                        }}
+                                    />
+                                )}
+                            />
+                            {teamleaderOptions.length > 0 && (
+                                <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: '0.7rem', mt: 0.5, ml: 0.5, display: 'block' }}>
+                                    💡 Pilih dari list atau ketik nama teamleader baru
+                                </Typography>
+                            )}
+                        </Box>
+                    </Stack>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2.5, pt: 1 }}>
+                    <Button
+                        onClick={closeNamaDialog}
+                        variant="outlined"
+                        disabled={namaDialog.saving}
+                        sx={{ borderRadius: 2 }}
+                    >
+                        Batal
+                    </Button>
+                    <Button
+                        onClick={handleSaveNama}
+                        variant="contained"
+                        disabled={namaDialog.saving || !namaDialog.form.nama.trim()}
+                        startIcon={namaDialog.saving ? <LinearProgress color="inherit" sx={{ width: 16 }} /> : <SaveIcon />}
+                        sx={{
+                            borderRadius: 2,
+                            background: namaDialog.mode === 'add' ? '#1e40af' : '#d97706',
+                            '&:hover': { background: namaDialog.mode === 'add' ? '#1e3a8a' : '#b45309' },
+                            '&:disabled': { background: '#cbd5e1' }
+                        }}
+                    >
+                        {namaDialog.saving ? 'Menyimpan...' : (namaDialog.mode === 'add' ? 'Tambah SPG' : 'Simpan Perubahan')}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* ========== KELOLA MASTER SKU ========== */}
             <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, mb: 3, borderRadius: 4, boxShadow: '0 2px 12px rgba(30, 64, 175, 0.04)', border: '1px solid rgba(30, 64, 175, 0.08)' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
                     <Avatar sx={{ bgcolor: '#eff6ff', width: 40, height: 40 }}>
@@ -763,7 +1046,109 @@ export default function SettingsView() {
                 </TableContainer>
             </Paper>
 
-            {/* ? DIALOG KONFIRMASI HAPUS ALL */}
+            {/* ========== 🚨 DANGER ZONE ========== */}
+            <Paper elevation={0} sx={{
+                p: { xs: 2, md: 3 }, mb: 3, borderRadius: 4,
+                border: '2px solid #fecaca',
+                background: 'linear-gradient(135deg, #fef2f2 0%, #ffffff 100%)',
+                boxShadow: '0 2px 12px rgba(239, 68, 68, 0.08)'
+            }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
+                    <Avatar sx={{ bgcolor: '#ef4444', width: 44, height: 44, boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)' }}>
+                        <WarningIcon sx={{ fontSize: 22 }} />
+                    </Avatar>
+                    <Box>
+                        <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1.1rem', color: '#991b1b', lineHeight: 1.2 }}>
+                            Danger Zone
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: '#b91c1c' }}>
+                            ⚠️ Aksi permanen - data tidak dapat dikembalikan
+                        </Typography>
+                    </Box>
+                </Box>
+                <Divider sx={{ mb: 2.5, borderColor: '#fecaca' }} />
+                <Stack spacing={2}>
+                    <Box sx={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        p: 2, borderRadius: 3, border: '1px solid #fecaca', bgcolor: 'white',
+                        flexWrap: 'wrap', gap: 1.5
+                    }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                            <GroupIcon sx={{ color: '#dc2626', fontSize: 28 }} />
+                            <Box>
+                                <Typography fontWeight="bold" sx={{ color: '#1e293b', fontSize: '0.95rem' }}>
+                                    Hapus Semua Nama SPG
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                    {namaDetailList.length} nama akan dihapus permanen
+                                </Typography>
+                            </Box>
+                        </Box>
+                        <Button
+                            variant="contained" color="error"
+                            startIcon={<DeleteForeverIcon />}
+                            onClick={() => openDeleteAllDialog('nama')}
+                            disabled={namaDetailList.length === 0}
+                            sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 600, background: '#dc2626', '&:hover': { background: '#b91c1c' }, '&:disabled': { background: '#cbd5e1' } }}
+                        >
+                            Hapus Semua Nama
+                        </Button>
+                    </Box>
+                    <Box sx={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        p: 2, borderRadius: 3, border: '1px solid #fecaca', bgcolor: 'white',
+                        flexWrap: 'wrap', gap: 1.5
+                    }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                            <InventoryIcon sx={{ color: '#dc2626', fontSize: 28 }} />
+                            <Box>
+                                <Typography fontWeight="bold" sx={{ color: '#1e293b', fontSize: '0.95rem' }}>
+                                    Hapus Semua SKU
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                    {skuList.length} SKU akan dihapus permanen
+                                </Typography>
+                            </Box>
+                        </Box>
+                        <Button
+                            variant="contained" color="error"
+                            startIcon={<DeleteForeverIcon />}
+                            onClick={() => openDeleteAllDialog('sku')}
+                            disabled={skuList.length === 0}
+                            sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 600, background: '#dc2626', '&:hover': { background: '#b91c1c' }, '&:disabled': { background: '#cbd5e1' } }}
+                        >
+                            Hapus Semua SKU
+                        </Button>
+                    </Box>
+                    <Box sx={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        p: 2, borderRadius: 3, border: '2px solid #ef4444', bgcolor: '#fff5f5',
+                        flexWrap: 'wrap', gap: 1.5
+                    }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                            <CartIcon sx={{ color: '#dc2626', fontSize: 28 }} />
+                            <Box>
+                                <Typography fontWeight="bold" sx={{ color: '#991b1b', fontSize: '0.95rem' }}>
+                                    Hapus Semua Data Penjualan
+                                </Typography>
+                                <Typography variant="caption" sx={{ color: '#b91c1c' }}>
+                                    ⚠️ Semua transaksi sell-out akan dihapus
+                                </Typography>
+                            </Box>
+                        </Box>
+                        <Button
+                            variant="contained" color="error"
+                            startIcon={<DeleteForeverIcon />}
+                            onClick={() => openDeleteAllDialog('sellout')}
+                            sx={{ borderRadius: 2.5, textTransform: 'none', fontWeight: 600, background: '#dc2626', '&:hover': { background: '#b91c1c' } }}
+                        >
+                            Hapus Semua Penjualan
+                        </Button>
+                    </Box>
+                </Stack>
+            </Paper>
+
+            {/* 🚨 DIALOG KONFIRMASI HAPUS ALL */}
             <Dialog
                 open={deleteAllDialog.open}
                 onClose={() => !isDeletingAll && setDeleteAllDialog({ open: false, type: '', confirmText: '' })}
@@ -784,10 +1169,7 @@ export default function SettingsView() {
                     <DialogContentText sx={{ mb: 2 }}>
                         Anda akan menghapus <strong>SEMUA</strong> data:
                     </DialogContentText>
-
-                    <Box sx={{
-                        bgcolor: '#fef2f2', p: 2, borderRadius: 2, border: '1px solid #fecaca', mb: 2.5
-                    }}>
+                    <Box sx={{ bgcolor: '#fef2f2', p: 2, borderRadius: 2, border: '1px solid #fecaca', mb: 2.5 }}>
                         <Stack spacing={1}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <Typography variant="body2" color="#991b1b" fontWeight={600}>Jenis Data:</Typography>
@@ -800,12 +1182,11 @@ export default function SettingsView() {
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <Typography variant="body2" color="#991b1b" fontWeight={600}>Jumlah Data:</Typography>
                                 <Typography variant="body2" fontWeight="bold" color="#1e293b">
-                                    {deleteAllDialog.type === 'nama' ? namaList.length : deleteAllDialog.type === 'sku' ? skuList.length : 'Semua data'} record
+                                    {deleteAllDialog.type === 'nama' ? namaDetailList.length : deleteAllDialog.type === 'sku' ? skuList.length : 'Semua data'} record
                                 </Typography>
                             </Box>
                         </Stack>
                     </Box>
-
                     <Typography variant="body2" sx={{ mb: 1, color: '#991b1b', fontWeight: 600 }}>
                         Ketik <strong style={{ fontFamily: 'monospace', bgcolor: '#fef3c7', padding: '2px 8px', borderRadius: 4 }}>HAPUS SEMUA</strong> untuk konfirmasi:
                     </Typography>
@@ -826,30 +1207,18 @@ export default function SettingsView() {
                         }}
                     />
                     <Typography variant="caption" color="#991b1b" sx={{ mt: 2, display: 'block', fontStyle: 'italic' }}>
-                        ?? Data yang dihapus tidak dapat dikembalikan. Pastikan sudah backup.
+                        ⚠️ Data yang dihapus tidak dapat dikembalikan. Pastikan sudah backup.
                     </Typography>
                 </DialogContent>
                 <DialogActions sx={{ px: 3, pb: 2, pt: 1 }}>
-                    <Button
-                        onClick={() => setDeleteAllDialog({ open: false, type: '', confirmText: '' })}
-                        variant="outlined"
-                        disabled={isDeletingAll}
-                        sx={{ borderRadius: 2 }}
-                    >
-                        Batal
-                    </Button>
+                    <Button onClick={() => setDeleteAllDialog({ open: false, type: '', confirmText: '' })} variant="outlined" disabled={isDeletingAll} sx={{ borderRadius: 2 }}>Batal</Button>
                     <Button
                         onClick={handleDeleteAll}
                         variant="contained"
                         color="error"
                         disabled={isDeletingAll || deleteAllDialog.confirmText !== 'HAPUS SEMUA'}
-                        startIcon={isDeletingAll ? <CircularProgress size={16} color="inherit" /> : <DeleteForeverIcon />}
-                        sx={{
-                            borderRadius: 2,
-                            background: '#dc2626',
-                            '&:hover': { background: '#b91c1c' },
-                            '&:disabled': { background: '#cbd5e1' }
-                        }}
+                        startIcon={isDeletingAll ? <LinearProgress color="inherit" sx={{ width: 16 }} /> : <DeleteForeverIcon />}
+                        sx={{ borderRadius: 2, background: '#dc2626', '&:hover': { background: '#b91c1c' }, '&:disabled': { background: '#cbd5e1' } }}
                     >
                         {isDeletingAll ? 'Menghapus...' : 'Ya, Hapus Semua'}
                     </Button>
