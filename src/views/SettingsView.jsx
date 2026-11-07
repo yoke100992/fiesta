@@ -865,8 +865,9 @@ export default function SettingsView() {
                                     }
                                 }}
                                 InputProps={{
-                                    startAdornment: <PersonIcon sx={{ color: 'text.secondary', mr: 1, fontSize: 20 }} />
-                                }}
+    ...params.InputProps,
+    startAdornment: <LocationIcon sx={{ color: 'text.secondary', mr: 1, fontSize: 20 }} />
+}}
                             />
                         </Box>
 
