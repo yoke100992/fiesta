@@ -815,198 +815,207 @@ export default function SettingsView() {
             </Paper>
 
             {/* ========== ✅ DIALOG ADD/EDIT NAMA SPG ========== */}
-            <Dialog
-                open={namaDialog.open}
-                onClose={closeNamaDialog}
-                maxWidth="sm"
-                fullWidth
-                sx={{ '& .MuiDialog-paper': { borderRadius: 3, m: { xs: 2, md: 'auto' } } }}
-            >
-                <DialogTitle sx={{
-                    display: 'flex', alignItems: 'center', gap: 1.5, pb: 1,
-                    background: namaDialog.mode === 'add'
-                        ? 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)'
-                        : 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)'
-                }}>
-                    <Avatar sx={{
-                        bgcolor: namaDialog.mode === 'add' ? '#1e40af' : '#d97706',
-                        width: 40, height: 40
-                    }}>
-                        {namaDialog.mode === 'add' ? <AddIcon /> : <EditIcon />}
-                    </Avatar>
-                    <Box>
-                        <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1.1rem', lineHeight: 1.2 }}>
-                            {namaDialog.mode === 'add' ? 'Tambah SPG Baru' : 'Edit Data SPG'}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                            {namaDialog.mode === 'add' ? 'Lengkapi informasi SPG di bawah' : 'Perbarui informasi SPG'}
-                        </Typography>
-                    </Box>
-                </DialogTitle>
-                <DialogContent sx={{ pt: 3 }}>
-                    <Stack spacing={2.5}>
-                        {/* Nama SPG */}
-                        <Box>
-                            <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
-                                Nama SPG <span style={{ color: '#ef4444' }}>*</span>
-                            </Typography>
-                            <TextField
-                                fullWidth
-                                value={namaDialog.form.nama}
-                                onChange={(e) => setNamaDialog(prev => ({ ...prev, form: { ...prev.form, nama: e.target.value } }))}
-                                placeholder="Contoh: Budi Santoso"
-                                disabled={namaDialog.saving}
+<Dialog
+    open={namaDialog.open}
+    onClose={closeNamaDialog}
+    maxWidth="sm"
+    fullWidth
+    sx={{ '& .MuiDialog-paper': { borderRadius: 3, m: { xs: 2, md: 'auto' } } }}
+>
+    <DialogTitle sx={{
+        display: 'flex', alignItems: 'center', gap: 1.5, pb: 1,
+        background: namaDialog.mode === 'add'
+            ? 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)'
+            : 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)'
+    }}>
+        <Avatar sx={{
+            bgcolor: namaDialog.mode === 'add' ? '#1e40af' : '#d97706',
+            width: 40, height: 40
+        }}>
+            {namaDialog.mode === 'add' ? <AddIcon /> : <EditIcon />}
+        </Avatar>
+        <Box>
+            <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1.1rem', lineHeight: 1.2 }}>
+                {namaDialog.mode === 'add' ? 'Tambah SPG Baru' : 'Edit Data SPG'}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+                {namaDialog.mode === 'add' ? 'Lengkapi informasi SPG di bawah' : 'Perbarui informasi SPG'}
+            </Typography>
+        </Box>
+    </DialogTitle>
+    <DialogContent sx={{ pt: 3 }}>
+        <Stack spacing={2.5}>
+            {/* Nama SPG */}
+            <Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
+                    Nama SPG <span style={{ color: '#ef4444' }}>*</span>
+                </Typography>
+                <TextField
+                    fullWidth
+                    value={namaDialog.form.nama}
+                    onChange={(e) => setNamaDialog(prev => ({ ...prev, form: { ...prev.form, nama: e.target.value } }))}
+                    placeholder="Contoh: Budi Santoso"
+                    disabled={namaDialog.saving}
+                    sx={{
+                        '& .MuiOutlinedInput-root': {
+                            borderRadius: 2.5,
+                            '& fieldset': { borderColor: '#e2e8f0' },
+                            '&:hover fieldset': { borderColor: '#1e40af' },
+                            '&.Mui-focused fieldset': { borderColor: '#1e40af', borderWidth: 2 }
+                        }
+                    }}
+                    InputProps={{
+                        startAdornment: <PersonIcon sx={{ color: 'text.secondary', mr: 1, fontSize: 20 }} />
+                    }}
+                />
+            </Box>
+
+            {/* Channel GT/MT */}
+            <Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', mb: 1, display: 'block', ml: 0.5, fontWeight: 600 }}>
+                    Channel <span style={{ color: '#ef4444' }}>*</span>
+                </Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5 }}>
+                    {CHANNEL_OPTIONS.map(opt => {
+                        const isSelected = namaDialog.form.channel === opt.value;
+                        return (
+                            <Box
+                                key={opt.value}
+                                onClick={() => !namaDialog.saving && setNamaDialog(prev => ({ ...prev, form: { ...prev.form, channel: opt.value } }))}
                                 sx={{
-                                    '& .MuiOutlinedInput-root': {
-                                        borderRadius: 2.5,
-                                        '& fieldset': { borderColor: '#e2e8f0' },
-                                        '&:hover fieldset': { borderColor: '#1e40af' },
-                                        '&.Mui-focused fieldset': { borderColor: '#1e40af', borderWidth: 2 }
-                                    }
+                                    p: 2, borderRadius: 2, cursor: 'pointer',
+                                    border: `2px solid ${isSelected ? opt.color : '#e2e8f0'}`,
+                                    bgcolor: isSelected ? opt.bg : 'white',
+                                    transition: 'all 0.2s ease',
+                                    textAlign: 'center',
+                                    '&:hover': { borderColor: opt.color, transform: 'translateY(-1px)' }
                                 }}
-                                InputProps={{
-    ...params.InputProps,
-    startAdornment: <LocationIcon sx={{ color: 'text.secondary', mr: 1, fontSize: 20 }} />
-}}
-                            />
-                        </Box>
-
-                        {/* Channel GT/MT */}
-                        <Box>
-                            <Typography variant="caption" sx={{ color: 'text.secondary', mb: 1, display: 'block', ml: 0.5, fontWeight: 600 }}>
-                                Channel <span style={{ color: '#ef4444' }}>*</span>
-                            </Typography>
-                            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5 }}>
-                                {CHANNEL_OPTIONS.map(opt => {
-                                    const isSelected = namaDialog.form.channel === opt.value;
-                                    return (
-                                        <Box
-                                            key={opt.value}
-                                            onClick={() => !namaDialog.saving && setNamaDialog(prev => ({ ...prev, form: { ...prev.form, channel: opt.value } }))}
-                                            sx={{
-                                                p: 2, borderRadius: 2, cursor: 'pointer',
-                                                border: `2px solid ${isSelected ? opt.color : '#e2e8f0'}`,
-                                                bgcolor: isSelected ? opt.bg : 'white',
-                                                transition: 'all 0.2s ease',
-                                                textAlign: 'center',
-                                                '&:hover': { borderColor: opt.color, transform: 'translateY(-1px)' }
-                                            }}
-                                        >
-                                            <ChannelIcon sx={{ fontSize: 28, color: opt.color, mb: 0.5 }} />
-                                            <Typography variant="body2" fontWeight="bold" sx={{ color: isSelected ? opt.color : '#475569', fontSize: '0.85rem' }}>
-                                                {opt.value}
-                                            </Typography>
-                                            <Typography variant="caption" sx={{ color: '#64748b', fontSize: '0.7rem', display: 'block' }}>
-                                                {opt.value === 'GT' ? 'General Trade' : 'Modern Trade'}
-                                            </Typography>
-                                        </Box>
-                                    );
-                                })}
+                            >
+                                <ChannelIcon sx={{ fontSize: 28, color: opt.color, mb: 0.5 }} />
+                                <Typography variant="body2" fontWeight="bold" sx={{ color: isSelected ? opt.color : '#475569', fontSize: '0.85rem' }}>
+                                    {opt.value}
+                                </Typography>
+                                <Typography variant="caption" sx={{ color: '#64748b', fontSize: '0.7rem', display: 'block' }}>
+                                    {opt.value === 'GT' ? 'General Trade' : 'Modern Trade'}
+                                </Typography>
                             </Box>
-                        </Box>
+                        );
+                    })}
+                </Box>
+            </Box>
 
-                        {/* Area */}
-                        <Box>
-                            <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
-                                Area
-                            </Typography>
-                            <Autocomplete
-                                freeSolo
-                                options={areaOptions}
-                                value={namaDialog.form.area}
-                                onChange={(e, v) => setNamaDialog(prev => ({ ...prev, form: { ...prev.form, area: v || '' } }))}
-                                onInputChange={(e, v) => setNamaDialog(prev => ({ ...prev, form: { ...prev.form, area: v } }))}
-                                disabled={namaDialog.saving}
-                                renderInput={(params) => (
-                                    <TextField
-                                        {...params}
-                                        placeholder="Contoh: Jakarta Pusat"
-                                        sx={{
-                                            '& .MuiOutlinedInput-root': {
-                                                borderRadius: 2.5,
-                                                '& fieldset': { borderColor: '#e2e8f0' },
-                                                '&:hover fieldset': { borderColor: '#1e40af' },
-                                                '&.Mui-focused fieldset': { borderColor: '#1e40af', borderWidth: 2 }
-                                            }
-                                        }}
-                                        InputProps={{
-                                            ...params.InputProps,
-                                            startAdornment: <LocationOn sx={{ color: 'text.secondary', mr: 1, fontSize: 20 }} />
-                                        }}
-                                    />
-                                )}
-                            />
-                            {areaOptions.length > 0 && (
-                                <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: '0.7rem', mt: 0.5, ml: 0.5, display: 'block' }}>
-                                    💡 Pilih dari list atau ketik area baru
-                                </Typography>
-                            )}
-                        </Box>
+            {/* Area */}
+            <Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
+                    Area
+                </Typography>
+                <Autocomplete
+                    freeSolo
+                    options={areaOptions}
+                    value={namaDialog.form.area}
+                    onChange={(e, v) => setNamaDialog(prev => ({ ...prev, form: { ...prev.form, area: v || '' } }))}
+                    onInputChange={(e, v) => setNamaDialog(prev => ({ ...prev, form: { ...prev.form, area: v } }))}
+                    disabled={namaDialog.saving}
+                    renderInput={(params) => (
+                        <TextField
+                            {...params}
+                            placeholder="Contoh: Jakarta Pusat"
+                            sx={{
+                                '& .MuiOutlinedInput-root': {
+                                    borderRadius: 2.5,
+                                    '& fieldset': { borderColor: '#e2e8f0' },
+                                    '&:hover fieldset': { borderColor: '#1e40af' },
+                                    '&.Mui-focused fieldset': { borderColor: '#1e40af', borderWidth: 2 }
+                                }
+                            }}
+                            InputProps={{
+                                ...params.InputProps,
+                                startAdornment: (
+                                    <>
+                                        <LocationIcon sx={{ color: 'text.secondary', mr: 1, fontSize: 20 }} />
+                                        {params.InputProps?.startAdornment}
+                                    </>
+                                )
+                            }}
+                        />
+                    )}
+                />
+                {areaOptions.length > 0 && (
+                    <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: '0.7rem', mt: 0.5, ml: 0.5, display: 'block' }}>
+                        💡 Pilih dari list atau ketik area baru
+                    </Typography>
+                )}
+            </Box>
 
-                        {/* Teamleader */}
-                        <Box>
-                            <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
-                                Nama Teamleader
-                            </Typography>
-                            <Autocomplete
-                                freeSolo
-                                options={teamleaderOptions}
-                                value={namaDialog.form.teamleader}
-                                onChange={(e, v) => setNamaDialog(prev => ({ ...prev, form: { ...prev.form, teamleader: v || '' } }))}
-                                onInputChange={(e, v) => setNamaDialog(prev => ({ ...prev, form: { ...prev.form, teamleader: v } }))}
-                                disabled={namaDialog.saving}
-                                renderInput={(params) => (
-                                    <TextField
-                                        {...params}
-                                        placeholder="Contoh: Andi Wijaya"
-                                        sx={{
-                                            '& .MuiOutlinedInput-root': {
-                                                borderRadius: 2.5,
-                                                '& fieldset': { borderColor: '#e2e8f0' },
-                                                '&:hover fieldset': { borderColor: '#1e40af' },
-                                                '&.Mui-focused fieldset': { borderColor: '#1e40af', borderWidth: 2 }
-                                            }
-                                        }}
-                                        InputProps={{
-                                            ...params.InputProps,
-                                            startAdornment: <TeamIcon sx={{ color: 'text.secondary', mr: 1, fontSize: 20 }} />
-                                        }}
-                                    />
-                                )}
-                            />
-                            {teamleaderOptions.length > 0 && (
-                                <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: '0.7rem', mt: 0.5, ml: 0.5, display: 'block' }}>
-                                    💡 Pilih dari list atau ketik nama teamleader baru
-                                </Typography>
-                            )}
-                        </Box>
-                    </Stack>
-                </DialogContent>
-                <DialogActions sx={{ px: 3, pb: 2.5, pt: 1 }}>
-                    <Button
-                        onClick={closeNamaDialog}
-                        variant="outlined"
-                        disabled={namaDialog.saving}
-                        sx={{ borderRadius: 2 }}
-                    >
-                        Batal
-                    </Button>
-                    <Button
-                        onClick={handleSaveNama}
-                        variant="contained"
-                        disabled={namaDialog.saving || !namaDialog.form.nama.trim()}
-                        startIcon={namaDialog.saving ? <LinearProgress color="inherit" sx={{ width: 16 }} /> : <SaveIcon />}
-                        sx={{
-                            borderRadius: 2,
-                            background: namaDialog.mode === 'add' ? '#1e40af' : '#d97706',
-                            '&:hover': { background: namaDialog.mode === 'add' ? '#1e3a8a' : '#b45309' },
-                            '&:disabled': { background: '#cbd5e1' }
-                        }}
-                    >
-                        {namaDialog.saving ? 'Menyimpan...' : (namaDialog.mode === 'add' ? 'Tambah SPG' : 'Simpan Perubahan')}
-                    </Button>
-                </DialogActions>
-            </Dialog>
+            {/* Teamleader */}
+            <Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
+                    Nama Teamleader
+                </Typography>
+                <Autocomplete
+                    freeSolo
+                    options={teamleaderOptions}
+                    value={namaDialog.form.teamleader}
+                    onChange={(e, v) => setNamaDialog(prev => ({ ...prev, form: { ...prev.form, teamleader: v || '' } }))}
+                    onInputChange={(e, v) => setNamaDialog(prev => ({ ...prev, form: { ...prev.form, teamleader: v } }))}
+                    disabled={namaDialog.saving}
+                    renderInput={(params) => (
+                        <TextField
+                            {...params}
+                            placeholder="Contoh: Andi Wijaya"
+                            sx={{
+                                '& .MuiOutlinedInput-root': {
+                                    borderRadius: 2.5,
+                                    '& fieldset': { borderColor: '#e2e8f0' },
+                                    '&:hover fieldset': { borderColor: '#1e40af' },
+                                    '&.Mui-focused fieldset': { borderColor: '#1e40af', borderWidth: 2 }
+                                }
+                            }}
+                            InputProps={{
+                                ...params.InputProps,
+                                startAdornment: (
+                                    <>
+                                        <TeamIcon sx={{ color: 'text.secondary', mr: 1, fontSize: 20 }} />
+                                        {params.InputProps?.startAdornment}
+                                    </>
+                                )
+                            }}
+                        />
+                    )}
+                />
+                {teamleaderOptions.length > 0 && (
+                    <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: '0.7rem', mt: 0.5, ml: 0.5, display: 'block' }}>
+                        💡 Pilih dari list atau ketik nama teamleader baru
+                    </Typography>
+                )}
+            </Box>
+        </Stack>
+    </DialogContent>
+    <DialogActions sx={{ px: 3, pb: 2.5, pt: 1 }}>
+        <Button
+            onClick={closeNamaDialog}
+            variant="outlined"
+            disabled={namaDialog.saving}
+            sx={{ borderRadius: 2 }}
+        >
+            Batal
+        </Button>
+        <Button
+            onClick={handleSaveNama}
+            variant="contained"
+            disabled={namaDialog.saving || !namaDialog.form.nama.trim()}
+            startIcon={namaDialog.saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+            sx={{
+                borderRadius: 2,
+                background: namaDialog.mode === 'add' ? '#1e40af' : '#d97706',
+                '&:hover': { background: namaDialog.mode === 'add' ? '#1e3a8a' : '#b45309' },
+                '&:disabled': { background: '#cbd5e1' }
+            }}
+        >
+            {namaDialog.saving ? 'Menyimpan...' : (namaDialog.mode === 'add' ? 'Tambah SPG' : 'Simpan Perubahan')}
+        </Button>
+    </DialogActions>
+</Dialog>
 
             {/* ========== KELOLA MASTER SKU ========== */}
             <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, mb: 3, borderRadius: 4, boxShadow: '0 2px 12px rgba(30, 64, 175, 0.04)', border: '1px solid rgba(30, 64, 175, 0.08)' }}>
