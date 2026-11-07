@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
     Box, Paper, Select, MenuItem, Button, Table, TableBody, TableCell,
     TableContainer, TableHead, TableRow, Typography, Stack,
@@ -35,13 +35,17 @@ const formatDateLocal = (date) => {
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
 };
+
 const formatRupiah = (number) => new Intl.NumberFormat('id-ID').format(number);
+
 const formatDateIndo = (dateStr) => {
     if (!dateStr) return '';
-    const [year, month, day] = dateStr.split('-');
+    const d = parseAnyDate(dateStr);
+    if (isNaN(d.getTime())) return String(dateStr);
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-    return `${day} ${months[parseInt(month) - 1]} ${year}`;
+    return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 };
+
 const isValidDate = (dateStr) => {
     if (dateStr === undefined || dateStr === null) return false;
     const str = String(dateStr).trim().toLowerCase();
@@ -52,6 +56,7 @@ const isValidDate = (dateStr) => {
         return true;
     } catch (e) { return false; }
 };
+
 const parseAnyDate = (dateStr) => {
     if (!dateStr) return new Date(0);
     const str = String(dateStr).trim();
@@ -68,6 +73,7 @@ const parseAnyDate = (dateStr) => {
     const fallback = new Date(str);
     return isNaN(fallback.getTime()) ? new Date(0) : fallback;
 };
+
 const compressImage = (arrayBuffer, quality = 0.9) => {
     return new Promise((resolve) => {
         try {
@@ -107,9 +113,18 @@ const compressImage = (arrayBuffer, quality = 0.9) => {
         } catch (err) { resolve(null); }
     });
 };
+
 const imageCache = new Map();
+const MAX_CACHE_SIZE = 50;
+
 const fetchImageWithCache = async (url) => {
     if (imageCache.has(url)) return imageCache.get(url);
+    
+    if (imageCache.size >= MAX_CACHE_SIZE) {
+        const firstKey = imageCache.keys().next().value;
+        imageCache.delete(firstKey);
+    }
+
     try {
         const response = await fetch(url, { mode: 'cors' });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -118,6 +133,7 @@ const fetchImageWithCache = async (url) => {
         return arrayBuffer;
     } catch (err) { return null; }
 };
+
 const getImageExtension = (url) => {
     if (!url) return 'jpeg';
     const u = url.toLowerCase();
@@ -125,6 +141,7 @@ const getImageExtension = (url) => {
     if (u.includes('.gif')) return 'gif';
     return 'jpeg';
 };
+
 const generateCalendarGrid = (year, month) => {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
@@ -145,6 +162,7 @@ const generateCalendarGrid = (year, month) => {
     }
     return grid;
 };
+
 const generateWhatsAppReport = (record, dateStr) => {
     const items = record.items || [];
     let report = `*Report Sell out tanggal ${formatDateIndo(dateStr)}*\n`;
@@ -194,7 +212,6 @@ export default function ViewView() {
     const [permitForm, setPermitForm] = useState({ nama: '', jenis: 'Sakit', catatan: '' });
     const [permitSubmitting, setPermitSubmitting] = useState(false);
 
-    // State untuk filter calendar tambahan & capture
     const [calendarFilterNama, setCalendarFilterNama] = useState('');
     const [isCapturing, setIsCapturing] = useState(false);
     const pivotCaptureRef = useRef(null);
@@ -212,8 +229,28 @@ export default function ViewView() {
         loadInitial();
     }, []);
 
-    const inactiveNamas = isNamaFiltered ? [] : namaList.filter(n => !pivotData[n]);
-    const activeNamas = Object.keys(pivotData);
+    // --- LOGIKA BARU: Target Nama & Inactive Dinamis ---
+    const targetNamas = useMemo(() => {
+        return filterNama.length > 0 ? filterNama : namaList;
+    }, [filterNama, namaList]);
+
+    const inactiveNamas = useMemo(() => {
+        return targetNamas.filter(n => !pivotData[n]);
+    }, [targetNamas, pivotData]);
+
+    const activeNamas = useMemo(() => {
+        return Object.keys(pivotData);
+    }, [pivotData]);
+
+    // --- LOGIKA BARU: Lookup Permit O(1) untuk Pivot Table ---
+    const permitsLookup = useMemo(() => {
+        const map = {};
+        permitData.forEach(p => {
+            if (!map[p.tanggal]) map[p.tanggal] = {};
+            map[p.tanggal][p.nama] = p;
+        });
+        return map;
+    }, [permitData]);
 
     const handleApplyFilter = async () => {
         setLoading(true);
@@ -438,16 +475,15 @@ export default function ViewView() {
     };
 
     const getPermitsByDate = (dateStr) => {
-    return permitData.filter(p => {
-        if (p.tanggal !== dateStr) return false;
-        // Jika filter awal > 1 SPG, gunakan calendarFilterNama untuk mempersempit
-        const activeFilter = filterNama.length > 1
-            ? (calendarFilterNama ? [calendarFilterNama] : filterNama)
-            : filterNama;
-        if (activeFilter.length > 0 && !activeFilter.includes(p.nama)) return false;
-        return true;
-    });
-};
+        return permitData.filter(p => {
+            if (p.tanggal !== dateStr) return false;
+            const activeFilter = filterNama.length > 1
+                ? (calendarFilterNama ? [calendarFilterNama] : filterNama)
+                : filterNama;
+            if (activeFilter.length > 0 && !activeFilter.includes(p.nama)) return false;
+            return true;
+        });
+    };
 
     const getTotalByDate = (dateStr) => {
         let t = 0;
@@ -757,7 +793,6 @@ export default function ViewView() {
                 <Divider sx={{ mb: 2.5 }} />
                 <Stack spacing={2.5}>
                     <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-                        {/* MULTI-SELECT NAMA SPG */}
                         <Box sx={{ flex: 1 }}>
                             <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block', ml: 0.5, fontWeight: 600 }}>
                                 Nama SPG <span style={{ color: '#94a3b8', fontWeight: 400 }}>(Bisa pilih beberapa)</span>
@@ -844,7 +879,6 @@ export default function ViewView() {
                     </Stack>
                 </Stack>
 
-                {/* Chip filter aktif */}
                 {isNamaFiltered && (
                     <Box sx={{ mt: 2, p: 1.5, borderRadius: 2, bgcolor: '#eff6ff', border: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                         <Typography variant="caption" sx={{ color: '#1e40af', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -880,8 +914,8 @@ export default function ViewView() {
                 </Box>
             </Paper>
 
-            {/* Card Status SPG */}
-            {isFiltered && namaList.length > 0 && !isNamaFiltered && (
+            {/* Card Status SPG (Diperbarui agar bekerja dengan multi-select) */}
+            {isFiltered && targetNamas.length > 0 && (
                 <Paper elevation={0} sx={{
                     mb: 3, borderRadius: 4, overflow: 'hidden',
                     border: inactiveNamas.length > 0 ? '2px solid #f59e0b' : '2px solid #10b981',
@@ -901,11 +935,11 @@ export default function ViewView() {
                             </Typography>
                             <Typography variant="caption" sx={{ fontSize: { xs: '0.7rem', md: '0.8rem' }, color: inactiveNamas.length > 0 ? '#b45309' : '#047857', display: 'block', mt: 0.3 }}>
                                 {inactiveNamas.length > 0
-                                    ? `dari ${namaList.length} total SPG • ${activeNamas.length} SPG aktif`
+                                    ? `dari ${targetNamas.length} SPG yang dipilih/ditampilkan • ${activeNamas.length} SPG memiliki data`
                                     : `${activeNamas.length} SPG sudah mengerjakan`}
                             </Typography>
                         </Box>
-                        <Chip label={`${activeNamas.length}/${namaList.length} Aktif`} size="small" sx={{ bgcolor: inactiveNamas.length > 0 ? '#f59e0b' : '#10b981', color: 'white', fontWeight: 'bold', fontSize: { xs: '0.7rem', md: '0.8rem' }, height: { xs: 26, md: 30 }, display: { xs: 'none', sm: 'flex' } }} />
+                        <Chip label={`${activeNamas.length}/${targetNamas.length} Aktif`} size="small" sx={{ bgcolor: inactiveNamas.length > 0 ? '#f59e0b' : '#10b981', color: 'white', fontWeight: 'bold', fontSize: { xs: '0.7rem', md: '0.8rem' }, height: { xs: 26, md: 30 }, display: { xs: 'none', sm: 'flex' } }} />
                         {inactiveNamas.length > 0 && <IconButton size="small" sx={{ color: '#92400e', transition: 'transform 0.3s', transform: showInactiveList ? 'rotate(180deg)' : 'rotate(0deg)' }}><ExpandMoreIcon /></IconButton>}
                     </Box>
                     <Collapse in={showInactiveList && inactiveNamas.length > 0}>
@@ -969,7 +1003,7 @@ export default function ViewView() {
                         <Avatar sx={{ bgcolor: '#667eea', width: 40, height: 40 }}><ReceiptIcon sx={{ fontSize: 22 }} /></Avatar>
                         <Box sx={{ flex: 1, minWidth: 0 }}>
                             <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1.1rem', color: '#667eea' }}>Pivot Penjualan Harian</Typography>
-                            <Typography variant="caption" color="text.secondary">Total Rupiah per SPG per Tanggal</Typography>
+                            <Typography variant="caption" color="text.secondary">Total Rupiah per SPG per Tanggal (Termasuk Permit)</Typography>
                         </Box>
                         <Tooltip title="Capture & Simpan sebagai PNG">
                             <IconButton
@@ -996,9 +1030,8 @@ export default function ViewView() {
                                 <TableHead>
                                     <TableRow>
                                         <TableCell sx={{ position: 'sticky', left: 0, zIndex: 3, background: '#3874BC', color: 'white', fontWeight: 'bold', minWidth: 160 }}>Nama SPG</TableCell>
-{/* ✅ KOLOM BARU: HK (Hari Kerja) */}
-<TableCell align="center" sx={{ background: '#7c3aed', color: 'white', fontWeight: 'bold', minWidth: 80, fontSize: '0.8rem' }}>HK</TableCell>
-{allDates.map(d => (<TableCell key={d} align="center" sx={{ background: '#3879BC', color: 'white', fontWeight: 'bold', minWidth: 110, fontSize: '0.75rem' }}>{formatDateIndo(d)}</TableCell>))}
+                                        <TableCell align="center" sx={{ background: '#7c3aed', color: 'white', fontWeight: 'bold', minWidth: 80, fontSize: '0.8rem' }}>HK</TableCell>
+                                        {allDates.map(d => (<TableCell key={d} align="center" sx={{ background: '#3879BC', color: 'white', fontWeight: 'bold', minWidth: 110, fontSize: '0.75rem' }}>{formatDateIndo(d)}</TableCell>))}
                                         <TableCell align="right" sx={{ background: '#059669', color: 'white', fontWeight: 'bold', minWidth: 130 }}>Total SPG</TableCell>
                                     </TableRow>
                                 </TableHead>
@@ -1006,23 +1039,72 @@ export default function ViewView() {
                                     {Object.keys(pivotData).sort().map((nama, ri) => (
                                         <TableRow key={nama} hover>
                                             <TableCell sx={{ position: 'sticky', left: 0, zIndex: 1, bgcolor: ri % 2 === 0 ? '#fff' : '#f8fafc', fontWeight: 'bold', fontSize: '0.85rem', borderRight: '1px solid #e2e8f0' }}>
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <Avatar sx={{ bgcolor: '#eff6ff', color: '#667eea', width: 32, height: 32, fontSize: '0.8rem' }}>{nama.charAt(0).toUpperCase()}</Avatar>
-        {nama}
-    </Box>
-</TableCell>
-{/* ✅ CELL BARU: Menampilkan Jumlah HK SPG */}
-<TableCell align="center" sx={{ bgcolor: '#f5f3ff', fontWeight: 'bold', color: '#7c3aed', fontFamily: 'monospace', fontSize: '0.95rem', borderRight: '1px solid #e2e8f0' }}>
-    {Object.keys(pivotData[nama].totalByDate).length}
-</TableCell>
-{allDates.map(d => { const t = pivotData[nama].totalByDate[d] || 0; return (<TableCell key={d} align="right" sx={{ fontFamily: 'monospace', fontSize: '0.85rem', color: t > 0 ? '#1e293b' : '#cbd5e1', fontWeight: t > 0 ? 600 : 400 }}>{t > 0 ? formatRupiah(t) : '-'}</TableCell>); })}
-                                            <TableCell align="right" sx={{ bgcolor: '#f0fdf4', fontWeight: 'bold', color: '#059669', fontFamily: 'monospace', fontSize: '0.9rem', borderLeft: '2px solid #059669' }}>{formatRupiah(getGrandTotal(nama))}</TableCell>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                                    <Avatar sx={{ bgcolor: '#eff6ff', color: '#667eea', width: 32, height: 32, fontSize: '0.8rem' }}>{nama.charAt(0).toUpperCase()}</Avatar>
+                                                    {nama}
+                                                </Box>
+                                            </TableCell>
+                                            
+                                            <TableCell align="center" sx={{ bgcolor: '#f5f3ff', fontWeight: 'bold', color: '#7c3aed', fontFamily: 'monospace', fontSize: '0.95rem', borderRight: '1px solid #e2e8f0' }}>
+                                                {Object.keys(pivotData[nama].totalByDate).length}
+                                            </TableCell>
+
+                                            {/* LOGIKA BARU: Tampilkan Permit jika ada, jika tidak tampilkan angka penjualan */}
+                                            {allDates.map(d => {
+                                                const t = pivotData[nama].totalByDate[d] || 0;
+                                                const permit = permitsLookup[d]?.[nama];
+
+                                                if (permit) {
+                                                    const cfg = PERMIT_CONFIG[permit.jenis] || PERMIT_CONFIG.Off;
+                                                    const Icon = cfg.icon;
+                                                    return (
+                                                        <TableCell key={d} align="center" sx={{ bgcolor: cfg.bg, border: `1px solid ${cfg.color}30` }}>
+                                                            <Tooltip title={`${permit.jenis}${permit.catatan ? `: ${permit.catatan}` : ''}`}>
+                                                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
+                                                                    <Icon sx={{ fontSize: 18, color: cfg.color }} />
+                                                                    <Typography variant="caption" sx={{ fontSize: '0.65rem', fontWeight: 'bold', color: cfg.color, lineHeight: 1 }}>
+                                                                        {cfg.label}
+                                                                    </Typography>
+                                                                </Box>
+                                                            </Tooltip>
+                                                        </TableCell>
+                                                    );
+                                                }
+
+                                                return (
+                                                    <TableCell key={d} align="right" sx={{ 
+                                                        fontFamily: 'monospace', 
+                                                        fontSize: '0.85rem', 
+                                                        color: t > 0 ? '#1e293b' : '#cbd5e1', 
+                                                        fontWeight: t > 0 ? 600 : 400 
+                                                    }}>
+                                                        {t > 0 ? formatRupiah(t) : '-'}
+                                                    </TableCell>
+                                                );
+                                            })}
+
+                                            <TableCell align="right" sx={{ bgcolor: '#f0fdf4', fontWeight: 'bold', color: '#059669', fontFamily: 'monospace', fontSize: '0.9rem', borderLeft: '2px solid #059669' }}>
+                                                {formatRupiah(getGrandTotal(nama))}
+                                            </TableCell>
                                         </TableRow>
                                     ))}
+                                    
+                                    {/* GRAND TOTAL ROW */}
                                     <TableRow sx={{ bgcolor: '#1e3a8a' }}>
                                         <TableCell sx={{ position: 'sticky', left: 0, zIndex: 1, bgcolor: '#1e3a8a', fontWeight: 'bold', color: 'white', borderRight: '2px solid #1e40af' }}>GRAND TOTAL</TableCell>
-                                        {allDates.map(d => { let dt = 0; Object.values(pivotData).forEach(nd => { dt += nd.totalByDate[d] || 0; }); return (<TableCell key={d} align="right" sx={{ fontFamily: 'monospace', fontSize: '0.85rem', color: 'white', fontWeight: 'bold' }}>{dt > 0 ? formatRupiah(dt) : '-'}</TableCell>); })}
-                                        <TableCell align="right" sx={{ bgcolor: '#059669', fontWeight: 'bold', color: 'white', fontFamily: 'monospace', fontSize: '1rem', borderLeft: '2px solid #047857' }}>{formatRupiah(getTotalAll())}</TableCell>
+                                        <TableCell align="center" sx={{ bgcolor: '#1e3a8a', color: 'white', fontWeight: 'bold' }}>-</TableCell>
+                                        {allDates.map(d => { 
+                                            let dt = 0; 
+                                            Object.values(pivotData).forEach(nd => { dt += nd.totalByDate[d] || 0; }); 
+                                            return (
+                                                <TableCell key={d} align="right" sx={{ fontFamily: 'monospace', fontSize: '0.85rem', color: 'white', fontWeight: 'bold' }}>
+                                                    {dt > 0 ? formatRupiah(dt) : '-'}
+                                                </TableCell>
+                                            ); 
+                                        })}
+                                        <TableCell align="right" sx={{ bgcolor: '#059669', fontWeight: 'bold', color: 'white', fontFamily: 'monospace', fontSize: '1rem', borderLeft: '2px solid #047857' }}>
+                                            {formatRupiah(getTotalAll())}
+                                        </TableCell>
                                     </TableRow>
                                 </TableBody>
                             </Table>
@@ -1065,13 +1147,12 @@ export default function ViewView() {
                         </Tooltip>
                     </Box>
 
-                    {/* FILTER NAMA SPG TAMBAHAN (muncul jika filter awal > 1 SPG) */}
-{filterNama.length > 1 && namaList.length > 0 && (
+                    {filterNama.length > 1 && namaList.length > 0 && (
                         <Box sx={{ mb: 2.5, p: 2, borderRadius: 3, bgcolor: '#f0f9ff', border: '1px dashed #7dd3fc', display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
                             <SearchIcon sx={{ color: '#0284c7', fontSize: 20 }} />
                             <Typography variant="caption" sx={{ color: '#0c4a6e', fontWeight: 700, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-    Filter Calendar ({filterNama.length} SPG dipilih):
-</Typography>
+                                Filter Calendar ({filterNama.length} SPG dipilih):
+                            </Typography>
                             <Autocomplete
                                 options={namaList}
                                 value={calendarFilterNama || null}
@@ -1399,34 +1480,4 @@ export default function ViewView() {
                         <Box sx={{ bgcolor: '#fef2f2', p: 2, borderRadius: 2, border: '1px solid #fecaca' }}>
                             <Stack spacing={1}>
                                 <Box sx={{ display: 'flex', gap: 1 }}><Typography variant="body2" color="#991b1b" fontWeight={600}>Tanggal:</Typography><Typography variant="body2">{formatDateIndo(deleteDialog.recordInfo.date)}</Typography></Box>
-                                <Box sx={{ display: 'flex', gap: 1 }}><Typography variant="body2" color="#991b1b" fontWeight={600}>SPG:</Typography><Typography variant="body2">{deleteDialog.recordInfo.nama}</Typography></Box>
-                                <Box sx={{ display: 'flex', gap: 1 }}><Typography variant="body2" color="#991b1b" fontWeight={600}>Toko:</Typography><Typography variant="body2">{deleteDialog.recordInfo.store}</Typography></Box>
-                                <Divider sx={{ my: 0.5 }} />
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Typography variant="body2" color="#991b1b" fontWeight={600}>Total:</Typography><Typography variant="body1" fontWeight="bold" color="#059669" sx={{ fontFamily: 'monospace' }}>Rp {formatRupiah(deleteDialog.recordInfo.total)}</Typography></Box>
-                            </Stack>
-                        </Box>
-                    )}
-                    <Typography variant="caption" color="#991b1b" sx={{ mt: 2, display: 'block', fontStyle: 'italic' }}>⚠️ Data tidak dapat dikembalikan.</Typography>
-                </DialogContent>
-                <DialogActions sx={{ px: 3, pb: 2 }}>
-                    <Button onClick={() => setDeleteDialog({ open: false, recordId: null, recordInfo: null, isDeleting: false })} variant="outlined" disabled={deleteDialog.isDeleting} sx={{ borderRadius: 2 }}>Batal</Button>
-                    <Button onClick={handleConfirmDelete} variant="contained" color="error" disabled={deleteDialog.isDeleting} startIcon={deleteDialog.isDeleting ? <CircularProgress size={16} color="inherit" /> : <DeleteIcon />} sx={{ borderRadius: 2 }}>{deleteDialog.isDeleting ? 'Menghapus...' : 'Ya, Hapus'}</Button>
-                </DialogActions>
-            </Dialog>
-
-            <Dialog open={isDownloading} disableEscapeKeyDown BackdropProps={{ sx: { backgroundColor: 'rgba(0,0,0,0.7)' } }} PaperProps={{ sx: { borderRadius: 3, p: 1 } }}>
-                <DialogContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4, px: 6, minWidth: 320 }}>
-                    <CircularProgress size={55} sx={{ mb: 3, color: '#667eea' }} />
-                    <Typography variant="h6" fontWeight="bold" align="center">Sedang Memproses...</Typography>
-                    <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 1, lineHeight: 1.6 }}>
-                        {includePhotos ? `Mengunduh dan mengkompres gambar, lalu menyusun laporan ${reportFormat === 'pivot' ? 'Pivot' : 'Raw Data'}. Mohon tunggu.` : `Menyusun laporan ${reportFormat === 'pivot' ? 'Pivot' : 'Raw Data'}. Mohon tunggu.`}
-                    </Typography>
-                </DialogContent>
-            </Dialog>
-
-            <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
-                <Alert severity={snackbar.severity} variant="filled" sx={{ width: '100%', borderRadius: 3, fontWeight: 600 }}>{snackbar.message}</Alert>
-            </Snackbar>
-        </Box>
-    );
-}
+                                <Box sx={{ display: 'flex', gap: 1 }}><Typography variant="body2" color="#991b1b" fontWeight={600}>SPG:</Typography><Typography variant="body2">{dele
